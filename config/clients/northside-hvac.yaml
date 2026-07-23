@@ -1,0 +1,39 @@
+client_id: northside-hvac
+display_name: Northside HVAC & Refrigeration
+phone_number: "+15551234567"
+timezone: America/Chicago
+
+realtime:
+  model: gpt-realtime-2.1
+  voice: cedar
+  prompt_id: pmpt_northside_v4
+  prompt_version: "12"
+  turn_detection:
+    type: semantic_vad
+    interrupt_response: true
+  variables:
+    business_name: Northside HVAC
+    emergency_fee: "$189 after-hours diagnostic"
+    brands_serviced: "Carrier, Trane, Lennox, Goodman"
+
+hours:
+  regular: { mon_fri: "08:00-18:00", sat: "09:00-14:00", sun: closed }
+  emergency_dispatch: always
+
+service_area:
+  postcodes: [60601, 60602, 60614, 60622, 60647, 60651]
+  out_of_area_action: capture_and_refer
+
+tools_enabled: [check_service_area, check_availability, book_appointment,
+                lookup_knowledge, send_payment_link, transfer_to_human]
+
+escalation:
+  triggers: [caller_requests_human, safety_keyword, third_tool_failure, sentiment_negative_2x]
+  safety_keywords: ["gas smell", "carbon monoxide", "smoke", "sparking"]
+  target_number: "+15559876543"
+  after_hours_target: voicemail_with_page
+
+budget:
+  max_call_seconds: 480
+  max_call_cost_usd: 1.20
+  wrap_up_at_pct: 80
