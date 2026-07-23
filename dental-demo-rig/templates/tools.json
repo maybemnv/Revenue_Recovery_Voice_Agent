@@ -1,0 +1,94 @@
+[
+  {
+    "type": "custom",
+    "name": "check_insurance",
+    "description": "Check whether this practice is in-network with a dental insurance carrier the caller named. Call this whenever a caller mentions any insurance carrier by name. Returns the practice's network status only - it never returns whether the caller's individual plan covers anything.",
+    "url": "{{webhook_base_url}}/tools/check_insurance",
+    "speak_during_execution": false,
+    "speak_after_execution": true,
+    "timeout_ms": 3000,
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "carrier": {
+          "type": "string",
+          "description": "The insurance carrier as the caller said it, e.g. 'Delta Dental', 'Cigna', 'MetLife'."
+        }
+      },
+      "required": ["carrier"]
+    }
+  },
+  {
+    "type": "custom",
+    "name": "find_appointment",
+    "description": "Find open appointment slots for a given appointment type. Call this after you have worked out which appointment type the caller needs. Returns two or three specific slots that fit the practice's hours and the right provider role.",
+    "url": "{{webhook_base_url}}/tools/find_appointment",
+    "speak_during_execution": true,
+    "speak_after_execution": true,
+    "timeout_ms": 5000,
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "appointment_type": {
+          "type": "string",
+          "description": "The appointment type name, matching one of the types listed in your instructions."
+        },
+        "preference": {
+          "type": "string",
+          "description": "Optional timing preference the caller expressed, e.g. 'next week', 'mornings', 'as soon as possible', 'Wednesday afternoon'."
+        }
+      },
+      "required": ["appointment_type"]
+    }
+  },
+  {
+    "type": "custom",
+    "name": "book_appointment",
+    "description": "Book one of the slots returned by find_appointment. Only call this after the caller has chosen a specific time. Returns a confirmation with the day, date, time, and provider to read back to the caller.",
+    "url": "{{webhook_base_url}}/tools/book_appointment",
+    "speak_during_execution": true,
+    "speak_after_execution": true,
+    "timeout_ms": 5000,
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "slot_id": {
+          "type": "string",
+          "description": "The slot_id from the find_appointment result the caller chose."
+        },
+        "patient_name": {
+          "type": "string",
+          "description": "The caller's name, if they have given it. Book without it if they have not yet."
+        },
+        "patient_phone": {
+          "type": "string",
+          "description": "The caller's mobile number for the reminder, if they have given it."
+        },
+        "reason": {
+          "type": "string",
+          "description": "One short phrase describing why they are coming in, in the caller's own words."
+        }
+      },
+      "required": ["slot_id"]
+    }
+  },
+  {
+    "type": "custom",
+    "name": "answer_from_kb",
+    "description": "Look up a question about this specific practice - services, policies, parking, what to bring, what the office does. Call this instead of answering from your own knowledge. If it returns found=false, tell the caller the office will confirm; do not answer anyway.",
+    "url": "{{webhook_base_url}}/tools/answer_from_kb",
+    "speak_during_execution": false,
+    "speak_after_execution": true,
+    "timeout_ms": 4000,
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "question": {
+          "type": "string",
+          "description": "The caller's question about the practice, rephrased as a clear standalone question."
+        }
+      },
+      "required": ["question"]
+    }
+  }
+]
