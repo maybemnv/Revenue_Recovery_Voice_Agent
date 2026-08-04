@@ -167,17 +167,17 @@ async def run_tool(
                 _timeout_hint(spec),
                 {"timeout_ms": budget_ms, "attempt": attempts},
             )
-        except Exception as exc:  # noqa: BLE001 - a raise must never reach the model
+        except Exception as exc:  # a raise must never reach the model
             log.exception("tool_handler_raised", tool=spec.name, attempt=attempts)
             result = failure(
                 "unavailable",
                 _timeout_hint(spec),
                 {"error": type(exc).__name__, "attempt": attempts},
             )
-        if result["status"] == "ok":
+        if result is not None and result["status"] == "ok":
             break
 
-    assert result is not None  # noqa: S101 - budgets is never empty
+    assert result is not None
     return Invocation(
         name=spec.name,
         arguments=arguments,

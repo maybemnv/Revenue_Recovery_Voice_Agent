@@ -79,7 +79,7 @@ async def dispatch_with_masking(
     if spec.masks_latency:
         # Fire before awaiting the handler — the whole point is to occupy the
         # window, not to report on it afterwards.
-        assert spec.filler_phrase is not None  # noqa: S101 - masks_latency implies it
+        assert spec.filler_phrase is not None
         await realtime.say_out_of_band(spec.filler_phrase)
         filler_played = True
 
