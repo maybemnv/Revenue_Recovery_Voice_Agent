@@ -16,14 +16,15 @@ import structlog
 
 from apps.api.security.redaction import redact_pan, redact_phone
 
-_call_context: ContextVar[dict[str, Any]] = ContextVar("call_context", default={})
+_call_context: ContextVar[dict[str, Any] | None] = ContextVar("call_context", default=None)
 
 _REDACT_PHONE_KEYS = {"from_e164", "to_e164", "phone", "phone_e164", "caller", "to", "from"}
 
 
 def bind_call_context(**kwargs: Any) -> None:
     """Merge keys into the ambient log context for this task/call."""
-    _call_context.set({**_call_context.get(), **{k: v for k, v in kwargs.items() if v is not None}})
+    current = _call_context.get() or {}
+    _call_context.set({**current, **{k: v for k, v in kwargs.items() if v is not None}})
 
 
 def clear_call_context() -> None:
@@ -31,13 +32,13 @@ def clear_call_context() -> None:
 
 
 def get_call_context() -> dict[str, Any]:
-    return dict(_call_context.get())
+    return dict(_call_context.get() or {})
 
 
 def _inject_call_context(
     _logger: Any, _method: str, event_dict: dict[str, Any]
 ) -> dict[str, Any]:
-    for key, value in _call_context.get().items():
+    for key, value in (_call_context.get() or {}).items():
         event_dict.setdefault(key, value)
     return event_dict
 
@@ -80,4 +81,4 @@ def configure_logging(level: str = "INFO", *, json_output: bool = True) -> None:
 
 
 def get_logger(name: str) -> structlog.stdlib.BoundLogger:
-    return structlog.get_logger(name)  # type: ignore[no-any-return]
+    return structlog.get_logger(name)
