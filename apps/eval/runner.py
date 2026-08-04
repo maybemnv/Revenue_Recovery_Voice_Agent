@@ -15,7 +15,7 @@ from typing import Any
 
 import yaml
 
-from apps.api.config.schema import ClientConfig
+from apps.api.config.schema import ClientConfig, EscalationConfig, RealtimeConfig
 from apps.api.domain.escalation import should_escalate
 from apps.api.domain.state import CallState
 from apps.eval.graders import Grade, grade_trace
@@ -69,8 +69,8 @@ def run_scenario(scenario: Scenario) -> Trace:
         client_id="eval",
         display_name="Evaluation client",
         phone_number="+15551234567",
-        realtime={"instructions": "Evaluation persona"},
-        escalation={"safety_keywords": list(SAFETY_KEYWORDS)},
+        realtime=RealtimeConfig(instructions="Evaluation persona"),
+        escalation=EscalationConfig(safety_keywords=list(SAFETY_KEYWORDS)),
     )
     state = CallState(call_id=scenario.scenario_id, client_id=config.client_id, from_e164="+1")
     assistant: list[str] = []
