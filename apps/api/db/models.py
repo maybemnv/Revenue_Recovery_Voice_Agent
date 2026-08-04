@@ -56,7 +56,9 @@ class Base(DeclarativeBase):
 class Call(Base):
     __tablename__ = "calls"
 
-    id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
     client_id: Mapped[str] = mapped_column(Text, nullable=False)
     twilio_call_sid: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
     from_e164: Mapped[str] = mapped_column(Text, nullable=False)
@@ -156,7 +158,9 @@ class CallEvent(Base):
 class Contact(Base):
     __tablename__ = "contacts"
 
-    id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
     client_id: Mapped[str] = mapped_column(Text, nullable=False)
     phone_e164: Mapped[str] = mapped_column(Text, nullable=False)
     full_name: Mapped[str | None] = mapped_column(Text)

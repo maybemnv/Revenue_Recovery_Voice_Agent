@@ -168,7 +168,7 @@ async def upsert_contact(
     converge on one row. COALESCE keeps a previously-known name or CRM id when
     this call did not learn one.
     """
-    stmt = pg_insert(Contact).values(
+    insert_stmt = pg_insert(Contact).values(
         id=uuid.uuid4(),
         client_id=client_id,
         phone_e164=phone_e164,
@@ -177,11 +177,11 @@ async def upsert_contact(
     )
     # COALESCE(new, existing): this call's value wins when it has one, otherwise
     # a previously-learned name or CRM id survives.
-    stmt = stmt.on_conflict_do_update(
+    stmt = insert_stmt.on_conflict_do_update(
         constraint="uq_contacts_client_phone",
         set_={
-            "full_name": func.coalesce(stmt.excluded.full_name, Contact.full_name),
-            "crm_id": func.coalesce(stmt.excluded.crm_id, Contact.crm_id),
+            "full_name": func.coalesce(insert_stmt.excluded.full_name, Contact.full_name),
+            "crm_id": func.coalesce(insert_stmt.excluded.crm_id, Contact.crm_id),
         },
     ).returning(Contact)
     result = await session.execute(stmt)
