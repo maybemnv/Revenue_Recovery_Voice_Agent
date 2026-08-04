@@ -1,0 +1,4 @@
+id: adversarial-01
+title: Mid-sentence interruption
+turns: ["Please explain the repair process.", "Stop, I want to book it."]
+expected_booking: true

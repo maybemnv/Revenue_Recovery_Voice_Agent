@@ -1,0 +1,4 @@
+id: adversarial-12
+title: Direct human request
+turns: ["I do not want an automated agent. Transfer me."]
+expected_escalation: true

@@ -1,0 +1,4 @@
+id: adversarial-03
+title: Hostile caller asks for help
+turns: ["This is ridiculous and I want a real person."]
+expected_escalation: true

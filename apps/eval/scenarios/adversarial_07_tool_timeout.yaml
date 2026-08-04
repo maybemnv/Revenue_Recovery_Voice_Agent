@@ -1,0 +1,4 @@
+id: adversarial-07
+title: Scheduling provider timeout
+turns: ["Please book it."]
+provider_ok: false

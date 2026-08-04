@@ -1,0 +1,4 @@
+id: happy-11
+title: Confirmed booking
+turns: ["I am in 60601.", "Please book the appointment."]
+expected_booking: true

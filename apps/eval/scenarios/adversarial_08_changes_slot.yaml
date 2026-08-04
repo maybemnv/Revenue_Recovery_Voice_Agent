@@ -1,0 +1,4 @@
+id: adversarial-08
+title: Caller changes selected slot
+turns: ["Book it.", "Actually, schedule it for tomorrow instead."]
+expected_booking: true

@@ -1,0 +1,4 @@
+id: happy-28
+title: Urgent confirmed booking
+turns: ["My heater failed. Please schedule a visit."]
+expected_booking: true
