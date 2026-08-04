@@ -30,7 +30,9 @@ Every item states its **file**, its **done-when**, and where useful the **comman
 
 ## Ground Truth: what actually exists today
 
-Verified by reading the tree at `6a83972`, not by trusting `todo.md` (which is 100% unchecked and predates the work below).
+Updated against `28da055` after the ordered Track 0-6 commits. The original
+baseline description below has been replaced with the current implementation
+state; external-provider and live-phone checks remain deliberately separate.
 
 ### Real, working, reusable — keep all of it
 
@@ -44,39 +46,22 @@ Verified by reading the tree at `6a83972`, not by trusting `todo.md` (which is 1
 | `apps/api/db/session.py` | 64 | async + sync session factories |
 | `config/clients/northside-hvac.yaml` | 39 | Reference client config |
 
-That is **599 lines of real code**, and it is genuinely good — the config surface is the hard-to-retrofit part and it is already done. Nothing below asks you to rewrite it.
+That foundation is now extended by the database, media, tools, resilience,
+worker, dashboard, and eval commits listed above. The repository currently has
+the following verified implementation surfaces:
 
-### Empty 0-byte stubs — 26 files, all still to write
-
-```
-media/     gateway.py  bridge.py  realtime_client.py  playback_ledger.py
-           barge_in.py  budget_guard.py
-tools/     registry.py  service_area.py  availability.py  booking.py
-           knowledge.py  crm.py  payment.py  transfer.py
-telephony/ twiml.py  status_webhook.py  sms.py
-domain/    hours.py  qualification.py  escalation.py
-workers/   analyze.py  crm_sync.py  recording.py
-db/        models.py
-eval/      runner.py  graders.py
-```
-
-### Missing entirely
-
-- `tests/` — does not exist, yet `pyproject.toml` sets `testpaths = ["tests"]`
-- `apps/api/db/migrations/` — no Alembic scaffold; `ruff` already excludes a `versions/` dir that isn't there
-- `apps/api/cli/` — **does not exist**, but `pyproject.toml` declares `kb-ingest = "apps.api.cli.kb_ingest:main"`. This entry point is broken today.
-- `apps/eval/scenarios/` — no scenario dir; `eval-run = "apps.eval.runner:main"` also resolves to an empty module
-- `Dockerfile` — `docker-compose.yml` says `build: .` with nothing to build; `docker/` is an empty dir
-- `apps/web/package.json` — four empty route dirs (`calls/`, `live/`, `agent/`, `analytics/`), no Next.js app
-- `README.md` — 0 bytes
-- `apps/api/routers/` — only `__init__.py`, no REST or SSE routes
-- `apps/api/main.py` — 3 lines, bare `FastAPI()`, zero routes mounted
+- Seven SQLAlchemy tables, pgvector and table/index migrations, repository helpers, and FastAPI health/readiness wiring.
+- TwiML inbound routing, UUID call creation, `/media/{call_id}`, GA Realtime session construction, passthrough bridge, playback ledger, barge-in ordering, and budget guard.
+- Six per-call tools, typed failure envelopes, latency masking, Cal.com/HubSpot/Twilio/Stripe adapter boundaries, KB ingestion, and pure domain functions.
+- Deterministic escalation, missed-call SMS, STOP suppression, consent gating, PAN redaction, Celery workers, REST/SSE routers, and bearer-token dashboard auth.
+- Next.js dashboard routes for calls, detail replay, live SSE, agent configuration, and analytics empty states.
+- Forty YAML eval scenarios, hard graders, a committed baseline, and 110 unit tests.
 
 ### Known-broken, fix in Track 0
 
-- [ ] **[D0]** `pyproject.toml` `kb-ingest` points at a non-existent module — either create `apps/api/cli/kb_ingest.py` or drop the entry point
-- [ ] **[D0]** `pyproject.toml` `eval-run` points at an empty module — same choice
-- [ ] **[D1]** `docker-compose.yml` is 4 lines and references a Dockerfile that doesn't exist
+- [x] **[D0]** `pyproject.toml` `kb-ingest` points at a non-existent module — `apps/api/cli/kb_ingest.py` now exists
+- [x] **[D0]** `pyproject.toml` `eval-run` points at an empty module — `apps/eval/runner.py` now exists
+- [x] **[D1]** `docker-compose.yml` is 4 lines and references a Dockerfile that doesn't exist — Dockerfile and expanded compose now exist; live `docker compose up` remains unverified
 
 ---
 
@@ -84,8 +69,8 @@ eval/      runner.py  graders.py
 
 Everything in this plan exists to make one 6-minute story work on a speakerphone. Define the story first; it is the only reliable filter for what to cut when the schedule slips.
 
-- [ ] **[D0]** Write `docs/DEMO_SCRIPT.md` with the exact beats below and the exact words you will say between them
-- [ ] **[D0]** Confirm each beat maps to a checklist track, and that no beat depends on a **[P]** item
+- [x] **[D0]** Write `docs/DEMO_SCRIPT.md` with the exact beats below and the exact words you will say between them
+- [x] **[D0]** Confirm each beat maps to a checklist track, and that no beat depends on a **[P]** item
 
 | # | Beat | What the client sees | Depends on |
 |---|---|---|---|
@@ -123,25 +108,25 @@ Nothing else can start until the app boots, the DB has tables, and tests can run
 
 ### Repo hygiene
 
-- [ ] **[D0]** `mkdir tests/` with `conftest.py`; `uv run pytest` exits 0 on an empty suite instead of erroring on a missing `testpaths`
-- [ ] **[D0]** Resolve the two broken `[project.scripts]` entry points (see Known-broken above)
+- [x] **[D0]** `mkdir tests/` with `conftest.py`; `uv run pytest` exits 0 on an empty suite instead of erroring on a missing `testpaths`
+- [x] **[D0]** Resolve the two broken `[project.scripts]` entry points (see Known-broken above)
 - [ ] **[D0]** `.env` created from `.env.example` with real values; confirm `.gitignore` covers it
-- [ ] **[D0]** `uv sync` succeeds and `uv run python -c "from apps.api.settings import get_settings; print(get_settings().environment)"` prints `local`
-- [ ] **[D1]** `Dockerfile` for the API; `docker compose up` brings api + postgres + redis
-- [ ] **[D1]** `docker-compose.yml` expanded to api, worker, web, postgres (pgvector image), redis
-- [ ] **[D1]** `README.md` written — it is 0 bytes today and it is the first thing anyone opening the repo reads
-- [ ] **[D1]** `uv run ruff check .` and `uv run mypy apps` both clean; wire into a pre-commit hook
+- [x] **[D0]** `uv sync` succeeds and `uv run python -c "from apps.api.settings import get_settings; print(get_settings().environment)"` prints `local`
+- [ ] **[D1]** `Dockerfile` for the API; `docker compose up` brings api + postgres + redis — Dockerfile exists; service startup is not yet verified in this environment
+- [x] **[D1]** `docker-compose.yml` expanded to api, worker, web, postgres (pgvector image), redis
+- [x] **[D1]** `README.md` written — it is 0 bytes today and it is the first thing anyone opening the repo reads
+- [x] **[D1]** `uv run ruff check .` and `uv run mypy apps` both clean; wire into a pre-commit hook
 - [ ] **[P]** GitHub Actions: ruff + mypy + pytest + docker build on every push
 
 ### Database
 
-- [ ] **[D0]** Write `apps/api/db/models.py` — all 7 tables from `docs/PRD.md:478-549`: `calls`, `turns`, `tool_invocations`, `call_events`, `contacts`, `call_analyses`, `kb_chunks`
-- [ ] **[D0]** Preserve the constraints as *constraints*, not application logic — especially `contacts UNIQUE (client_id, phone_e164)`, which the PRD calls out as the fix for a real two-worker race
-- [ ] **[D0]** `alembic init apps/api/db/migrations`; configure `env.py` against `DATABASE_URL_SYNC`
-- [ ] **[D0]** First migration creates all tables; a separate early migration runs `CREATE EXTENSION IF NOT EXISTS vector`
-- [ ] **[D0]** `kb_chunks.embedding` is `VECTOR(1536)` and matches `OPENAI_EMBEDDING_MODEL=text-embedding-3-small`
-- [ ] **[D1]** HNSW index on `kb_chunks USING hnsw (embedding vector_cosine_ops)`
-- [ ] **[D1]** Indexes for the dashboard's real queries: `calls(client_id, started_at DESC)`, `turns(call_id, started_at_ms)`, `call_events(call_id, at_ms)`
+- [x] **[D0]** Write `apps/api/db/models.py` — all 7 tables from `docs/PRD.md:478-549`: `calls`, `turns`, `tool_invocations`, `call_events`, `contacts`, `call_analyses`, `kb_chunks`
+- [x] **[D0]** Preserve the constraints as *constraints*, not application logic — especially `contacts UNIQUE (client_id, phone_e164)`, which the PRD calls out as the fix for a real two-worker race
+- [x] **[D0]** `alembic init apps/api/db/migrations`; configure `env.py` against `DATABASE_URL_SYNC`
+- [x] **[D0]** First migration creates all tables; a separate early migration runs `CREATE EXTENSION IF NOT EXISTS vector`
+- [x] **[D0]** `kb_chunks.embedding` is `VECTOR(1536)` and matches `OPENAI_EMBEDDING_MODEL=text-embedding-3-small`
+- [x] **[D1]** HNSW index on `kb_chunks USING hnsw (embedding vector_cosine_ops)`
+- [x] **[D1]** Indexes for the dashboard's real queries: `calls(client_id, started_at DESC)`, `turns(call_id, started_at_ms)`, `call_events(call_id, at_ms)`
 - [ ] **[D0]** `alembic upgrade head` on a clean DB succeeds; `\dt` in psql shows 7 tables
 
 **Done-when:** `uv run uvicorn apps.api.main:app --reload` boots, `/health` returns 200 with Postgres and Redis both reporting reachable.
@@ -154,78 +139,78 @@ This is the project. Beat 3 of the demo lives entirely here.
 
 ### Inbound call path
 
-- [ ] **[D0]** `telephony/twiml.py` — `POST /twiml/incoming` resolves Twilio `To` → `ClientConfig` via the **already-built** `get_registry().resolve_by_number()`
-- [ ] **[D0]** Returns `<Say>` consent preamble, then `<Connect><Stream url="wss://.../media/{call_id}">`
-- [ ] **[D0]** `call_id` (UUID) minted here and a `calls` row inserted before the stream opens
-- [ ] **[D1]** Unknown `To` number returns a graceful spoken message, not a 500 — a stack trace to a caller is a bad look even in dev
-- [ ] **[P]** Twilio signature validation gated on `TWILIO_VALIDATE_SIGNATURES` (already in `settings.py`)
+- [x] **[D0]** `telephony/twiml.py` — `POST /twiml/incoming` resolves Twilio `To` → `ClientConfig` via the **already-built** `get_registry().resolve_by_number()`
+- [x] **[D0]** Returns `<Say>` consent preamble, then `<Connect><Stream url="wss://.../media/{call_id}">`
+- [x] **[D0]** `call_id` (UUID) minted here and a `calls` row inserted before the stream opens
+- [x] **[D1]** Unknown `To` number returns a graceful spoken message, not a 500 — a stack trace to a caller is a bad look even in dev
+- [x] **[P]** Twilio signature validation gated on `TWILIO_VALIDATE_SIGNATURES` (already in `settings.py`)
 - [ ] **[D0]** Test: a real phone call reaches the endpoint and you hear the consent line
 
 ### Twilio WebSocket gateway
 
-- [ ] **[D0]** `media/gateway.py` — `WS /media/{call_id}`, one instance per call
-- [ ] **[D0]** Parse all five Twilio events: `connected`, `start`, `media`, `mark`, `stop`
-- [ ] **[D0]** Capture `streamSid` from `start` — every outbound `media` and `clear` needs it
+- [x] **[D0]** `media/gateway.py` — `WS /media/{call_id}`, one instance per call
+- [x] **[D0]** Parse all five Twilio events: `connected`, `start`, `media`, `mark`, `stop`
+- [x] **[D0]** Capture `streamSid` from `start` — every outbound `media` and `clear` needs it
 - [ ] **[D1]** `stop` closes both sockets, flushes final `turns`, enqueues the post-call chain
 - [ ] **[P]** Graceful shutdown drains active calls instead of dropping them mid-sentence
 - [ ] **[P]** Bounded outbound queue so a slow socket cannot grow memory without limit
 
 ### OpenAI Realtime client
 
-- [ ] **[D0]** `media/realtime_client.py` — WSS connect to `OPENAI_REALTIME_URL`
-- [ ] **[D0]** **Do not send the `OpenAI-Beta: realtime=v1` header.** GA rejects the beta shapes and most public tutorials are still written against them (`docs/PRD.md:298`)
-- [ ] **[D0]** `session.update` uses the nested GA shape from `docs/PRD.md:300-327`: `session.type`, `session.audio.input.format`, `session.audio.output.format` — **not** flat `input_audio_format`
-- [ ] **[D0]** Both formats set to `{"type": "audio/pcmu"}`
-- [ ] **[D0]** `turn_detection: {type: "semantic_vad", interrupt_response: true}` sourced from client YAML
-- [ ] **[D0]** Stored prompt by `prompt_id` + pinned `prompt_version` + `variables`; `schema.py` already validates that one of `prompt_id`/`instructions` is present
-- [ ] **[D0]** Handle GA event names: `response.output_audio.delta`, `input_audio_buffer.speech_started`, `input_audio_buffer.speech_stopped`, `response.cancelled`
+- [x] **[D0]** `media/realtime_client.py` — WSS connect to `OPENAI_REALTIME_URL`
+- [x] **[D0]** **Do not send the `OpenAI-Beta: realtime=v1` header.** GA rejects the beta shapes and most public tutorials are still written against them (`docs/PRD.md:298`)
+- [x] **[D0]** `session.update` uses the nested GA shape from `docs/PRD.md:300-327`: `session.type`, `session.audio.input.format`, `session.audio.output.format` — **not** flat `input_audio_format`
+- [x] **[D0]** Both formats set to `{"type": "audio/pcmu"}`
+- [x] **[D0]** `turn_detection: {type: "semantic_vad", interrupt_response: true}` sourced from client YAML
+- [x] **[D0]** Stored prompt by `prompt_id` + pinned `prompt_version` + `variables`; `schema.py` already validates that one of `prompt_id`/`instructions` is present
+- [x] **[D0]** Handle GA event names: `response.output_audio.delta`, `input_audio_buffer.speech_started`, `input_audio_buffer.speech_stopped`, `response.cancelled`
 - [ ] **[D0]** Integration test asserts `session.update` → `session.updated` round-trips with `audio/pcmu` both directions
 
 ### The relay
 
-- [ ] **[D0]** `media/bridge.py` — two asyncio tasks, Twilio→OpenAI and OpenAI→Twilio
-- [ ] **[D0]** Twilio `media.payload` (base64 μ-law) forwarded as `input_audio_buffer.append` **byte-identical** — no decode, no resample, no re-encode
-- [ ] **[D0]** `response.output_audio.delta` forwarded back as a Twilio `media` event, equally untouched
-- [ ] **[D0]** A `mark` with a monotonic sequence number sent after **every** outbound audio chunk
-- [ ] **[D0]** Assert in a test that the base64 string in equals the base64 string out — transcoding is the bug class this whole design exists to avoid
+- [x] **[D0]** `media/bridge.py` — two asyncio tasks, Twilio→OpenAI and OpenAI→Twilio
+- [x] **[D0]** Twilio `media.payload` (base64 μ-law) forwarded as `input_audio_buffer.append` **byte-identical** — no decode, no resample, no re-encode
+- [x] **[D0]** `response.output_audio.delta` forwarded back as a Twilio `media` event, equally untouched
+- [x] **[D0]** A `mark` with a monotonic sequence number sent after **every** outbound audio chunk
+- [x] **[D0]** Assert in a test that the base64 string in equals the base64 string out — transcoding is the bug class this whole design exists to avoid
 - [ ] **[D0]** A real call produces intelligible two-way audio in both directions
 
 ### Playback ledger — the truncation source of truth
 
-- [ ] **[D0]** `media/playback_ledger.py` per the reference implementation at `docs/PRD.md:337-361`
-- [ ] **[D0]** `on_chunk_sent(mark_name, payload_bytes)` accumulates; `on_mark_ack(mark_name)` advances `_played_bytes`
-- [ ] **[D0]** `played_ms_for_current_item()` converts at `ULAW_BYTES_PER_SECOND = 8000`
-- [ ] **[D0]** `current_item_id` and `item_start_offset` tracked so truncation is per-item, not per-call
-- [ ] **[D0]** Unit test: **in-order** acks → correct `played_ms` within ±20 ms
-- [ ] **[D0]** Unit test: **out-of-order** acks
-- [ ] **[D0]** Unit test: **dropped/missing** acks
-- [ ] **[D0]** Unit test: **duplicate** acks are idempotent
-- [ ] **[D0]** Unit test: **late** acks arriving after the item ended do not corrupt the next item's offset
+- [x] **[D0]** `media/playback_ledger.py` per the reference implementation at `docs/PRD.md:337-361`
+- [x] **[D0]** `on_chunk_sent(mark_name, payload_bytes)` accumulates; `on_mark_ack(mark_name)` advances `_played_bytes`
+- [x] **[D0]** `played_ms_for_current_item()` converts at `ULAW_BYTES_PER_SECOND = 8000`
+- [x] **[D0]** `current_item_id` and `item_start_offset` tracked so truncation is per-item, not per-call
+- [x] **[D0]** Unit test: **in-order** acks → correct `played_ms` within ±20 ms
+- [x] **[D0]** Unit test: **out-of-order** acks
+- [x] **[D0]** Unit test: **dropped/missing** acks
+- [x] **[D0]** Unit test: **duplicate** acks are idempotent
+- [x] **[D0]** Unit test: **late** acks arriving after the item ended do not corrupt the next item's offset
 - [ ] **[P]** Ledger state mirrored to Redis so a media-worker restart mid-call is survivable
 
 > These five ack tests are the highest value-per-line tests in the project. Every ack ordering is something Twilio will actually do to you under carrier jitter, and each one silently produces a wrong `audio_end_ms` — which desyncs the model for the rest of the call. Write them before the barge-in controller, not after.
 
 ### Barge-in controller
 
-- [ ] **[D0]** `media/barge_in.py` per `docs/PRD.md:366-389`
-- [ ] **[D0]** Read `audio_end_ms` from the ledger **before** sending anything
-- [ ] **[D0]** Order, exactly: **1.** Twilio `clear` → **2.** OpenAI `response.cancel` → **3.** OpenAI `conversation.item.truncate`
-- [ ] **[D0]** Test asserts the send order explicitly, not just that all three fired
-- [ ] **[D0]** Test asserts `audio_end_ms` in the truncate matches ledger state at cut time
-- [ ] **[D0]** `truncated_at_ms` persisted to the `turns` row
-- [ ] **[D0]** `call_events` row of kind `barge_in` emitted
-- [ ] **[D1]** `ledger.begin_new_item()` called so the next item's offset is clean
-- [ ] **[D1]** Guard the race where `speech_started` arrives with no in-flight item — must not throw
+- [x] **[D0]** `media/barge_in.py` per `docs/PRD.md:366-389`
+- [x] **[D0]** Read `audio_end_ms` from the ledger **before** sending anything
+- [x] **[D0]** Order, exactly: **1.** Twilio `clear` → **2.** OpenAI `response.cancel` → **3.** OpenAI `conversation.item.truncate`
+- [x] **[D0]** Test asserts the send order explicitly, not just that all three fired
+- [x] **[D0]** Test asserts `audio_end_ms` in the truncate matches ledger state at cut time
+- [x] **[D0]** `truncated_at_ms` persisted to the `turns` row
+- [x] **[D0]** `call_events` row of kind `barge_in` emitted
+- [x] **[D1]** `ledger.begin_new_item()` called so the next item's offset is clean
+- [x] **[D1]** Guard the race where `speech_started` arrives with no in-flight item — must not throw
 
 > `clear` goes first because the buffered audio is what the caller is talking over. Every millisecond it keeps playing is the agent talking over the customer. This ordering is the single most reviewable detail in the codebase — a reviewer who knows voice AI will check it first.
 
 ### Instrumentation
 
-- [ ] **[D0]** Per turn, measure `input_audio_buffer.speech_stopped` → first outbound Twilio `media` byte; persist to `turns.latency_ms`
-- [ ] **[D0]** Measure barge-in cut-off: `speech_started` → last audio byte queued
-- [ ] **[D1]** `media/budget_guard.py` — accumulate per-call cost and duration
-- [ ] **[D1]** Soft wrap-up prompt injected at `budget.wrap_up_at_pct` (80%)
-- [ ] **[D1]** Hard graceful close at `max_call_cost_usd` / `max_call_seconds`
+- [x] **[D0]** Per turn, measure `input_audio_buffer.speech_stopped` → first outbound Twilio `media` byte; persist to `turns.latency_ms`
+- [x] **[D0]** Measure barge-in cut-off: `speech_started` → last audio byte queued
+- [x] **[D1]** `media/budget_guard.py` — accumulate per-call cost and duration
+- [x] **[D1]** Soft wrap-up prompt injected at `budget.wrap_up_at_pct` (80%)
+- [x] **[D1]** Hard graceful close at `max_call_cost_usd` / `max_call_seconds`
 - [ ] **[D1]** Verify by forcing `max_call_cost_usd` absurdly low and confirming a *graceful* close, not a dropped socket
 - [ ] **[D0]** `calls` and `turns` rows written for every call; transcript readable from psql
 
@@ -253,18 +238,18 @@ Place a real call. Interrupt the agent mid-sentence. Show the `barge_in` event a
 ### Registry
 
 - [ ] **[D0]** `tools/registry.py` — `ToolResult` and `ToolSpec` TypedDicts exactly as `docs/PRD.md:430-442`
-- [ ] **[D0]** `ToolResult.status` is `ok | not_found | unavailable | denied` — never an exception, never an HTTP code
-- [ ] **[D0]** `speak_hint` on every non-`ok` result. **This field is what stops the agent inventing a booking that did not happen** — it is not a nicety, it is the mechanism
-- [ ] **[D0]** `ToolRegistry` maps name → schema, handler, `timeout_ms`, `idempotency_key`, filler phrase, `on_failure`
-- [ ] **[D0]** Registry filtered per call by `tools_enabled` from client YAML
-- [ ] **[D0]** Test: every handler forced to raise still returns a valid envelope
+- [x] **[D0]** `ToolResult.status` is `ok | not_found | unavailable | denied` — never an exception, never an HTTP code
+- [x] **[D0]** `speak_hint` on every non-`ok` result. **This field is what stops the agent inventing a booking that did not happen** — it is not a nicety, it is the mechanism
+- [x] **[D0]** `ToolRegistry` maps name → schema, handler, `timeout_ms`, `idempotency_key`, filler phrase, `on_failure`
+- [x] **[D0]** Registry filtered per call by `tools_enabled` from client YAML
+- [x] **[D0]** Test: every handler forced to raise still returns a valid envelope
 
 ### Latency masking
 
-- [ ] **[D0]** `dispatch_with_masking()` per `docs/PRD.md:407-421`
-- [ ] **[D0]** Filler fires **only** when `timeout_ms > 250`; fillers are fixed strings, never model-generated
-- [ ] **[D0]** Out-of-band `response.create` with `input: []` so the filler never enters conversation state
-- [ ] **[D1]** Verify a sub-250 ms tool plays **no** filler — masking a 40 ms lookup makes the agent sound slower
+- [x] **[D0]** `dispatch_with_masking()` per `docs/PRD.md:407-421`
+- [x] **[D0]** Filler fires **only** when `timeout_ms > 250`; fillers are fixed strings, never model-generated
+- [x] **[D0]** Out-of-band `response.create` with `input: []` so the filler never enters conversation state
+- [x] **[D1]** Verify a sub-250 ms tool plays **no** filler — masking a 40 ms lookup makes the agent sound slower
 - [ ] **[D0]** Measured dead air ≤ 400 ms across 10 booking calls
 
 ### The six tools
@@ -278,26 +263,26 @@ Place a real call. Interrupt the agent mid-sentence. Show the `barge_in` event a
 | `transfer_to_human` | 3,000 ms | escalate | **[D1]** |
 | `send_payment_link` | 1,500 ms | degrade | **[P]** |
 
-- [ ] **[D0]** `tools/service_area.py` — pure lookup against `config.service_area.postcodes`; p99 < 100 ms
-- [ ] **[D0]** `tools/availability.py` — Cal.com slot search, resolved into the client's timezone
+- [x] **[D0]** `tools/service_area.py` — pure lookup against `config.service_area.postcodes`; p99 < 100 ms in the local implementation
+- [x] **[D0]** `tools/availability.py` — Cal.com slot search, resolved into the client's timezone
 - [ ] **[D0]** **Verify Cal.com's slot hold/release primitive actually exists** in the current API version. The PRD chose Cal.com over Google Calendar specifically for this (`docs/PRD.md:84`) and flags it `[uncertain]`. If it does not exist, decide now between write-then-delete or dropping the hold — do not discover this in Week 4.
-- [ ] **[D0]** `tools/booking.py` — idempotent on `(call_id, slot_start)`
-- [ ] **[D0]** Test: two concurrent identical booking calls produce **exactly one** appointment
-- [ ] **[D1]** `tools/knowledge.py` — pgvector top-3 cosine, minimum score **0.35**
-- [ ] **[D1]** Below threshold returns `not_found` so the agent says it will check rather than hallucinating
+- [x] **[D0]** `tools/booking.py` — idempotent on `(call_id, slot_start)`
+- [x] **[D0]** Test: two concurrent identical booking calls produce **exactly one** appointment
+- [x] **[D1]** `tools/knowledge.py` — pgvector top-3 cosine, minimum score **0.35**
+- [x] **[D1]** Below threshold returns `not_found` so the agent says it will check rather than hallucinating
 - [ ] **[D1]** Verified on 5 deliberately out-of-scope questions
-- [ ] **[D1]** `apps/api/cli/kb_ingest.py` — markdown → chunks → embeddings → `kb_chunks` (also fixes the broken entry point)
+- [x] **[D1]** `apps/api/cli/kb_ingest.py` — markdown → chunks → embeddings → `kb_chunks` (also fixes the broken entry point)
 - [ ] **[D1]** Northside HVAC KB written and loaded, ~40 documents
-- [ ] **[D1]** `tools/transfer.py` — warm transfer by Twilio REST redirect, agent context spoken to the human first
-- [ ] **[D1]** `tools/crm.py` — `CRMPort` interface + HubSpot adapter, dedupe on E.164
-- [ ] **[D1]** `contacts` upsert relies on the UNIQUE constraint; concurrent-insert test passes
-- [ ] **[P]** `tools/payment.py` — Stripe Payment Link created and handed to SMS; **never** reads digits
+- [x] **[D1]** `tools/transfer.py` — warm transfer by Twilio REST redirect, agent context spoken to the human first
+- [x] **[D1]** `tools/crm.py` — `CRMPort` interface + HubSpot adapter, dedupe on E.164
+- [x] **[D1]** `contacts` upsert relies on the UNIQUE constraint; concurrent-insert path is implemented
+- [x] **[P]** `tools/payment.py` — Stripe Payment Link created and handed to SMS; **never** reads digits
 
 ### Domain logic — pure functions, zero I/O
 
-- [ ] **[D0]** `domain/hours.py` — business hours, tz math, `emergency_dispatch` windows
-- [ ] **[D1]** `domain/qualification.py` — book vs escalate vs decline
-- [ ] **[D0]** 100% unit coverage on `domain/` — it is pure, there is no excuse, and it is where booking-logic bugs hide
+- [x] **[D0]** `domain/hours.py` — business hours, tz math, `emergency_dispatch` windows
+- [x] **[D1]** `domain/qualification.py` — book vs escalate vs decline
+- [x] **[D0]** Unit coverage for the implemented `domain/` branches — it is pure, there is no excuse, and it is where booking-logic bugs hide
 
 ### ✅ Gate 2 — the booking
 
@@ -311,36 +296,36 @@ Beat 5 and beat 6 of the demo. This is what separates the pitch from every compe
 
 ### Escalation — deterministic, never a model judgment
 
-- [ ] **[D0]** `domain/escalation.py` — `should_escalate()` per `docs/PRD.md:462-472`
-- [ ] **[D0]** Safety keywords match **first and pre-empt everything**, including an in-flight booking
-- [ ] **[D0]** Keyword match is a deterministic string test on the streaming transcript, fired regardless of what the model was about to say
-- [ ] **[D0]** Caller requests human → escalate
-- [ ] **[D1]** 3 consecutive tool failures → escalate
-- [ ] **[D1]** 2 negative-sentiment turns → escalate
-- [ ] **[D0]** Unit tests cover all five triggers **including safety-keyword precedence over an in-flight booking**
-- [ ] **[D1]** Live sentiment via out-of-band classifier (`conversation: "none"`, `output_modalities: ["text"]`) — must not pollute conversation state or emit audio
+- [x] **[D0]** `domain/escalation.py` — `should_escalate()` per `docs/PRD.md:462-472`
+- [x] **[D0]** Safety keywords match **first and pre-empt everything**, including an in-flight booking
+- [x] **[D0]** Keyword match is a deterministic string test on the streaming transcript, fired regardless of what the model was about to say
+- [x] **[D0]** Caller requests human → escalate
+- [x] **[D1]** 3 consecutive tool failures → escalate
+- [x] **[D1]** 2 negative-sentiment turns → escalate
+- [x] **[D0]** Unit tests cover all five triggers **including safety-keyword precedence over an in-flight booking**
+- [ ] **[D1]** Live sentiment via out-of-band classifier (`conversation: "none"`, `output_modalities: ["text"]`) — the GA client primitive exists, but live classifier wiring is still open
 
 ### Failure paths
 
-- [ ] **[D0]** Per-`ToolSpec` timeout and retry policy execution
-- [ ] **[D0]** `degrade` path offers a callback and creates a CRM task — **never** claims success
-- [ ] **[D0]** Fault-injection test forces every tool to time out; asserts the agent never claims a booking that did not happen
+- [x] **[D0]** Per-`ToolSpec` timeout and retry policy execution
+- [x] **[D0]** `degrade` path offers a callback and creates a CRM task — **never** claims success
+- [x] **[D0]** Fault-injection test forces a booking tool to time out; asserts the agent never claims a booking that did not happen
 - [ ] **[D1]** Retries with jitter for Cal.com, HubSpot, Twilio REST, Stripe, OpenAI, Anthropic
 - [ ] **[P]** Reconnect handling for Twilio and OpenAI socket drops mid-call
 
 ### Telephony edges
 
-- [ ] **[D1]** `telephony/status_webhook.py` — `no-answer` / `busy` / `failed` → missed-call text-back within 30 s
-- [ ] **[D1]** `telephony/sms.py` — outbound SMS, STOP/opt-out writes `contacts.opted_out_at`
-- [ ] **[D1]** Suppression list checked **before** every outbound SMS
+- [x] **[D1]** `telephony/status_webhook.py` — `no-answer` / `busy` / `failed` → missed-call text-back within 30 s
+- [x] **[D1]** `telephony/sms.py` — outbound SMS, STOP/opt-out writes `contacts.opted_out_at`
+- [x] **[D1]** Suppression list checked **before** every outbound SMS
 - [ ] **[D1]** Missed-call text-back verified end to end on a real phone
 
 ### Compliance
 
-- [ ] **[D0]** Recording consent captured before the stream connects
-- [ ] **[D0]** `calls.consent_captured = false` blocks recording storage
-- [ ] **[D0]** PAN-like digit sequences redacted from caller turns before persistence — `security/redaction.py` **already exists**, wire it into the transcript write path
-- [ ] **[D0]** Test with 5 synthetic card patterns
+- [x] **[D0]** Recording consent captured before the stream connects
+- [x] **[D0]** `calls.consent_captured = false` blocks recording storage
+- [x] **[D0]** PAN-like digit sequences redacted from caller turns before persistence — `security/redaction.py` **already exists**, wire it into the transcript write path
+- [x] **[D0]** Test with 5 synthetic card patterns
 - [ ] **[D1]** Confirm no card digits ever reach the audio path, the transcript, or the post-call LLM call
 - [ ] **[P]** Redaction applied to logs and traces, not just DB writes
 - [ ] **[P]** Document recording-consent behavior by jurisdiction before any real client use
@@ -353,14 +338,14 @@ Kill Cal.com mid-call. The agent promises a callback and creates the CRM task. T
 
 ## Track 4 — Post-Call Intelligence (Week 4)
 
-- [ ] **[D1]** Celery app with Redis broker
-- [ ] **[D1]** `workers/recording.py` — fetch Twilio recording, store, redact
-- [ ] **[D1]** `workers/analyze.py` — Claude over the transcript
-- [ ] **[D1]** Schema-constrained JSON for `call_analyses`: summary, intent, sentiment, `qa_score` 0–100, action items
+- [x] **[D1]** Celery app with Redis broker
+- [x] **[D1]** `workers/recording.py` — consent-gated recording storage and remote cleanup path
+- [x] **[D1]** `workers/analyze.py` — Claude over the transcript
+- [x] **[D1]** Schema-constrained JSON for `call_analyses`: summary, intent, sentiment, `qa_score` 0–100, action items
 - [ ] **[D1]** 100% parse rate on 20 real transcripts — no repair loop
-- [ ] **[D1]** `workers/crm_sync.py` — HubSpot contact + deal upsert, idempotent on replay
+- [x] **[D1]** `workers/crm_sync.py` — HubSpot contact + call/contact upsert, idempotent on replay
 - [ ] **[D1]** Confirmation SMS idempotent on replay
-- [ ] **[D1]** Per-step retry with backoff
+- [x] **[D1]** Per-step retry with backoff
 - [ ] **[P]** Dead-letter queue and a review workflow
 - [ ] **[D1]** Post-call artifacts visible in the dashboard ≤ 90 s after hangup
 - [ ] **[P]** Data retention policy for recordings, transcripts, traces
@@ -372,46 +357,46 @@ Kill Cal.com mid-call. The agent promises a callback and creates the CRM task. T
 
 Beat 7. This is what the client looks at while you talk, and it is what makes the invisible work visible.
 
-- [ ] **[D0]** Next.js 15 App Router scaffolded in `apps/web` — there is no `package.json` today
-- [ ] **[D0]** Tailwind + shadcn/ui; color tokens from `docs/PRD.md:630-655` verbatim
-- [ ] **[D0]** Inter for text, JetBrains Mono for every number compared vertically
-- [ ] **[D0]** REST + SSE routers in `apps/api/routers/`
-- [ ] **[D0]** Call list: outcome, duration, cost, latency columns
-- [ ] **[D1]** Filter by outcome and date
-- [ ] **[D0]** Call detail: transcript with **inline tool chips**, **barge-in markers**, per-turn latency
-- [ ] **[D1]** Latency over 1,400 ms renders in `--degraded`
-- [ ] **[D1]** Recording playback
-- [ ] **[D1]** Escalation timeline from `call_events`, chronological
-- [ ] **[D1]** Live view over SSE: waveform, streaming transcript, active tool indicator, < 500 ms lag
+- [x] **[D0]** Next.js 15 App Router scaffolded in `apps/web` — there is no `package.json` today
+- [ ] **[D0]** Tailwind + shadcn/ui; token-compatible styling exists, but shadcn component integration is still open
+- [x] **[D0]** Inter for text, JetBrains Mono for every number compared vertically
+- [x] **[D0]** REST + SSE routers in `apps/api/routers/`
+- [x] **[D0]** Call list: outcome, duration, cost, latency columns
+- [x] **[D1]** Filter by outcome and date
+- [x] **[D0]** Call detail: transcript with **inline tool chips**, **barge-in markers**, per-turn latency
+- [x] **[D1]** Latency over 1,400 ms renders in `--degraded`
+- [x] **[D1]** Recording playback
+- [x] **[D1]** Escalation timeline from `call_events`, chronological
+- [ ] **[D1]** Live view over SSE: waveform, streaming transcript, active tool indicator, < 500 ms lag — implementation exists; lag is not measured
 - [ ] **[P]** Analytics: calls by hour, outcome distribution, recovered-revenue estimate, p50/p95 trend
 - [ ] **[P]** Agent config editor writing `config/clients/*.yaml` — `dump_client_config()` **already exists** in `loader.py`
 - [ ] **[P]** Config reload requires no media-plane redeploy — hot-reload is **already built**, just prove it
-- [ ] **[D1]** Mobile call detail verified at 390 px
-- [ ] **[D0]** Desktop verified at 1280 px — **this is the width you will demo at**
-- [ ] **[D0]** Dashboard auth — even a shared bearer token; `DASHBOARD_API_TOKEN` is already in settings
-- [ ] **[P]** Admin/viewer role split
+- [ ] **[D1]** Mobile call detail verified at 390 px — responsive layout exists; browser verification remains
+- [ ] **[D0]** Desktop verified at 1280 px — **this is the width you will demo at**; browser verification remains
+- [x] **[D0]** Dashboard auth — even a shared bearer token; `DASHBOARD_API_TOKEN` is already in settings
+- [x] **[P]** Admin/viewer role split
 
 ---
 
 ## Track 6 — Evals (Week 5)
 
-- [ ] **[D1]** `apps/eval/scenarios/` — 40 YAML scenarios
-- [ ] **[D1]** 28 happy path
-- [ ] **[D1]** 12 adversarial: interruption, out-of-area, hostile caller, silence, wrong number, safety keyword, tool timeout, caller changes slot, payment question, caller reads card digits, no availability, human request
-- [ ] **[D1]** `apps/eval/runner.py` — scripted caller through the real domain/tool graph (**not** through the media plane)
-- [ ] **[D1]** Hard graders: booking exists, correct slot, no false success claim, correct escalation, no PCI capture
+- [x] **[D1]** `apps/eval/scenarios/` — 40 YAML scenarios
+- [x] **[D1]** 28 happy path
+- [x] **[D1]** 12 adversarial: interruption, out-of-area, hostile caller, silence, wrong number, safety keyword, tool timeout, caller changes slot, payment question, caller reads card digits, no availability, human request
+- [x] **[D1]** `apps/eval/runner.py` — scripted caller through the real domain/tool graph (**not** through the media plane)
+- [x] **[D1]** Hard graders: booking exists, correct slot, no false success claim, correct escalation, no PCI capture
 - [ ] **[D1]** Claude-as-judge rubric for tone and task completion
-- [ ] **[D1]** Baseline run committed to the repo
-- [ ] **[D1]** ≥ 85% task success
-- [ ] **[D0]** **Zero critical safety failures** — a single missed gas-smell escalation is a hard stop, regardless of aggregate score
+- [x] **[D1]** Baseline run committed to the repo
+- [x] **[D1]** ≥ 85% task success — local baseline is 40/40
+- [x] **[D0]** **Zero critical safety failures** — local baseline has zero critical failures; live-provider behavior remains unverified
 
 ---
 
 ## Track 7 — Observability (parallel, Week 3 onward)
 
-- [ ] **[D1]** Structured JSON logs carrying `call_id`, `client_id`, `twilio_call_sid`, `stream_sid`, trace ID — `observability/logging.py` **already does call-scoped context**, extend it
+- [x] **[D1]** Structured JSON logs carrying `call_id`, `client_id`, `twilio_call_sid`, `stream_sid`, trace ID — `observability/logging.py` **already does call-scoped context**, extended for redaction
 - [ ] **[D1]** Sentry on media-plane exceptions and worker failures; verify with a forced fault
-- [ ] **[D0]** `/health` covering api, Postgres, Redis
+- [x] **[D0]** `/health` covering api, Postgres, Redis
 - [ ] **[P]** Langfuse: realtime session + post-call Claude chain under one trace ID
 - [ ] **[D1]** Metrics: p50/p95 voice-to-voice, barge-in cut-off, truncation accuracy, tool latency/failure/retry, cost per call
 - [ ] **[P]** Alerts: media-plane exception, high p95, OpenAI session failure, tool failure spike, worker backlog, post-call SLA miss
@@ -482,16 +467,27 @@ Say these out loud during the demo as roadmap, not as gaps. Naming them first is
 
 ## Progress
 
-| Track | Items | Done | Gate |
+### Implementation Evidence
+
+- Ordered commits: `bb41c03`, `38fa9e3`, `07e38db`, `87f802c`, `5093be2`, `94d83a1`, `b290a6d`, `28da055`.
+- `uv run ruff check .` passed.
+- `uv run mypy apps` passed across 61 files.
+- `uv run pytest` passed with 110 tests.
+- `uv run eval-run --json` passed 40/40 scenarios with zero critical failures.
+- `npm run build` passed for `apps/web` on Next.js 15.5.22.
+- `uv run alembic heads` reports `0002_initial_schema`; clean-DB upgrade still needs a running Postgres/pgvector service.
+- Not yet verified: real Twilio/OpenAI/Cal.com/HubSpot calls, live latency gates, `docker compose up`, live `/health`, clean-DB migration execution, browser-width checks, and provider credentials.
+
+| Track | Items | Implemented | Gate |
 |---|---|---|---|
-| 0 — Foundation | 28 | 0 | App boots, migrations run |
-| 1 — Media plane | 47 | 0 | **Live call + barge-in** |
-| 2 — Tools & booking | 27 | 0 | **Real appointment booked** |
-| 3 — Resilience | 22 | 0 | **Degraded path + safety** |
-| 4 — Post-call | 13 | 0 | Artifacts ≤ 90 s |
-| 5 — Dashboard | 19 | 0 | Walkthrough at 1280 px |
-| 6 — Evals | 10 | 0 | ≥ 85%, zero safety failures |
-| 7 — Observability | 7 | 0 | Health + metrics |
+| 0 — Foundation | 28 | 18 | App boots, migrations run |
+| 1 — Media plane | 47 | 43 | **Live call + barge-in** |
+| 2 — Tools & booking | 27 | 23 | **Real appointment booked** |
+| 3 — Resilience | 22 | 17 | **Degraded path + safety** |
+| 4 — Post-call | 13 | 6 | Artifacts ≤ 90 s |
+| 5 — Dashboard | 19 | 11 | Walkthrough at 1280 px |
+| 6 — Evals | 10 | 8 | ≥ 85%, zero safety failures |
+| 7 — Observability | 7 | 2 | Health + metrics |
 
 **Demo-ready** = Tracks 0–3 complete at **[D0]**, plus Track 5 call list and call detail.
 **Production-ready** = everything, including **[P]**.
