@@ -171,6 +171,37 @@ class Contact(Base):
     __table_args__ = (UniqueConstraint("client_id", "phone_e164", name="uq_contacts_client_phone"),)
 
 
+class SmsSend(Base):
+    """One row per message we have decided to send. The UNIQUE key is the dedupe.
+
+    Twilio retries a status callback on any non-2xx and on its own timeouts, so
+    the missed-call text has an at-least-once trigger sitting in front of it. The
+    row is claimed *before* the provider call and kept even when that call fails:
+    a replay must not resend, and a caller who got one "we missed you" text
+    should never get a second because our 200 was lost in transit.
+    """
+
+    __tablename__ = "sms_sends"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    client_id: Mapped[str] = mapped_column(Text, nullable=False)
+    to_e164: Mapped[str] = mapped_column(Text, nullable=False)
+    # Caller-supplied in the sense that it is derived from a webhook: what the
+    # send is *for*, e.g. "missed_call:CAxxxx" or "payment_link:<call_id>".
+    dedupe_key: Mapped[str] = mapped_column(Text, nullable=False)
+    provider_sid: Mapped[str | None] = mapped_column(Text)
+    delivered: Mapped[bool] = mapped_column(
+        Boolean, server_default=text("false"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=text("now()"), nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint("client_id", "dedupe_key", name="uq_sms_sends_client_key"),
+    )
+
+
 class CallAnalysis(Base):
     __tablename__ = "call_analyses"
 

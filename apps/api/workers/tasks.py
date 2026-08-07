@@ -18,6 +18,7 @@ from celery.exceptions import SoftTimeLimitExceeded
 
 from apps.api.db.session import sync_session_scope
 from apps.api.observability.logging import get_logger
+from apps.api.resilience import celery_countdown
 from apps.api.workers import analyze as analyze_mod
 from apps.api.workers import crm_sync as crm_mod
 from apps.api.workers import recording as recording_mod
@@ -40,7 +41,8 @@ def analyze_call(self, call_id: str) -> dict[str, object]:
     except SoftTimeLimitExceeded:
         raise
     except Exception as exc:  # transient DB/API faults are retryable
-        raise self.retry(exc=exc, countdown=10 * (self.request.retries + 1)) from exc
+        countdown = celery_countdown(self.request.retries, base_seconds=10)
+        raise self.retry(exc=exc, countdown=countdown) from exc
 
     sync_crm.delay(call_id)
     return {"status": "ok", "intent": analysis.intent, "qa_score": analysis.qa_score}
@@ -57,7 +59,8 @@ def sync_crm(self, call_id: str) -> dict[str, object]:
     except SoftTimeLimitExceeded:
         raise
     except Exception as exc:
-        raise self.retry(exc=exc, countdown=30 * (self.request.retries + 1)) from exc
+        countdown = celery_countdown(self.request.retries, base_seconds=30)
+        raise self.retry(exc=exc, countdown=countdown) from exc
     return {"status": "ok", "crm_id": crm_id}
 
 
@@ -79,5 +82,6 @@ def store_recording(
     except SoftTimeLimitExceeded:
         raise
     except Exception as exc:
-        raise self.retry(exc=exc, countdown=20 * (self.request.retries + 1)) from exc
+        countdown = celery_countdown(self.request.retries, base_seconds=20)
+        raise self.retry(exc=exc, countdown=countdown) from exc
     return {"status": "stored" if stored else "rejected_no_consent"}
