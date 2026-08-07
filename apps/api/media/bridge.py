@@ -26,6 +26,8 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
+from fastapi import WebSocketDisconnect
+
 from apps.api.config.schema import ClientConfig
 from apps.api.domain.escalation import EscalationDecision, should_escalate
 from apps.api.domain.state import CallState, ToolOutcome
@@ -44,10 +46,14 @@ from apps.api.media.realtime_client import (
     EV_RESPONSE_DONE,
     EV_SPEECH_STARTED,
     EV_SPEECH_STOPPED,
+    OOB_TOPIC_SENTIMENT,
     RealtimeClient,
     build_session_update,
+    oob_topic,
+    response_output_text,
 )
 from apps.api.observability.logging import bind_call_context, get_logger
+from apps.api.security.redaction import redact_pan
 from apps.api.tools.dispatch import FunctionCall, dispatch_with_masking
 from apps.api.tools.registry import Invocation, RegistryBundle
 
@@ -66,6 +72,25 @@ OUTBOUND_QUEUE_MAX = 200
 # How long a graceful close waits for queued audio to reach Twilio before
 # giving up and closing anyway. A hung socket must not hold the call open.
 DRAIN_TIMEOUT_SECONDS = 2.0
+
+# The live sentiment classifier. Constrained to one word from a closed set so
+# the reply is parseable without a schema, and phrased around what the *caller*
+# expressed so it cannot be answered on the agent's behalf. `record_sentiment`
+# treats anything outside the negative set as a streak reset, so an unparseable
+# answer is a false negative — it never invents an escalation.
+SENTIMENT_LABELS = ("positive", "neutral", "negative", "frustrated", "angry")
+SENTIMENT_INSTRUCTIONS = (
+    "Classify the emotional state the caller expressed in their most recent "
+    "message. Reply with exactly one word from this list and nothing else: "
+    + ", ".join(SENTIMENT_LABELS)
+    + "."
+)
+
+# The classifier runs with `conversation: "none"`, so the model cannot see the
+# conversation and the utterance has to travel in the instructions. Truncated
+# because sentiment lives in the opening clause of a turn, and a caller who
+# monologues should not cost a proportionally larger classification.
+SENTIMENT_MAX_CHARS = 500
 
 
 class TwilioSocket(Protocol):
@@ -241,7 +266,15 @@ class MediaBridge:
     # -- Twilio -> OpenAI -------------------------------------------------
     async def _pump_twilio(self) -> None:
         while not self._stop.is_set():
-            raw = await self.twilio.receive_text()
+            try:
+                raw = await self.twilio.receive_text()
+            except WebSocketDisconnect:
+                # Either the caller hung up without a `stop`, or a graceful
+                # shutdown closed this socket underneath us. Both are ordinary
+                # ends to a call, not errors to be recorded against it.
+                log.info("twilio_socket_closed", stream_sid=self.stream_sid)
+                self._stop.set()
+                return
             try:
                 message = json.loads(raw)
             except json.JSONDecodeError:
@@ -333,8 +366,15 @@ class MediaBridge:
                 await self._on_function_call(event)
 
             elif kind == EV_RESPONSE_DONE:
-                self._pending_response_start = None
-                self._first_audio_latency_ms = None
+                # An out-of-band response finishing is not the spoken turn
+                # finishing. It runs concurrently with one, so resetting the
+                # latency clock here would discard the pending voice-to-voice
+                # measurement and attribute the wrong number to the next turn.
+                if oob_topic(event) == OOB_TOPIC_SENTIMENT:
+                    await self._on_sentiment_verdict(response_output_text(event))
+                else:
+                    self._pending_response_start = None
+                    self._first_audio_latency_ms = None
 
             elif kind == EV_RESPONSE_CANCELLED:
                 self._pending_response_start = None
@@ -449,6 +489,44 @@ class MediaBridge:
         self.state.last_caller_text = text
         self.state.caller_turns += 1
         await self._record_turn("caller", text)
+        await self._check_escalation()
+        await self._classify_sentiment(text)
+
+    async def _classify_sentiment(self, text: str) -> None:
+        """Ask for a sentiment label out-of-band. Advisory, so failure is silent.
+
+        Fired after the turn is recorded and escalation has been evaluated, so a
+        classifier that never answers cannot delay either. The verdict lands on a
+        later `response.done` and feeds the *next* escalation check — sentiment
+        escalation needs two consecutive negative turns anyway, so nothing is
+        lost by the label arriving one turn behind.
+        """
+        if not self.config.escalation.live_sentiment or self.state.escalated:
+            return
+        utterance = redact_pan(text.strip())[:SENTIMENT_MAX_CHARS]
+        try:
+            await self.realtime.classify_out_of_band(
+                f'{SENTIMENT_INSTRUCTIONS}\n\nCaller said: "{utterance}"',
+                OOB_TOPIC_SENTIMENT,
+            )
+        except Exception as exc:
+            # Never break a live call over a classification the call can run
+            # without. A socket that is genuinely gone surfaces in the pumps.
+            log.debug("sentiment_request_failed", error=type(exc).__name__)
+
+    async def _on_sentiment_verdict(self, label: str) -> None:
+        normalised = label.strip().strip(".").lower()
+        if normalised not in SENTIMENT_LABELS:
+            log.debug("sentiment_unparsed", raw=normalised[:40])
+            return
+        self.state.record_sentiment(normalised)
+        await self._emit(
+            "sentiment",
+            {
+                "label": normalised,
+                "negative_turns": self.state.negative_sentiment_turns,
+            },
+        )
         await self._check_escalation()
 
     async def _on_agent_transcript(self, text: str) -> None:

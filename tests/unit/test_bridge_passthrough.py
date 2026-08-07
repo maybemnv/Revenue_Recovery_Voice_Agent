@@ -20,6 +20,7 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 import pytest
+from fastapi import WebSocketDisconnect
 
 from apps.api.config.schema import ClientConfig
 from apps.api.domain.state import CallState
@@ -77,6 +78,17 @@ class FakeRealtime:
     async def say_out_of_band(self, line: str) -> None:
         await self.create_response({"input": [], "instructions": f'Say exactly: "{line}"'})
 
+    async def classify_out_of_band(self, instructions: str, topic: str) -> None:
+        await self.create_response(
+            {
+                "conversation": "none",
+                "input": [],
+                "output_modalities": ["text"],
+                "instructions": instructions,
+                "metadata": {"topic": topic},
+            }
+        )
+
     async def close(self) -> None:
         self.closed = True
 
@@ -108,12 +120,16 @@ class FakeTwilio:
         self._frames: list[dict[str, Any] | Step] = list(frames)
         self.sent: list[dict[str, Any]] = []
         self.closed = False
+        self._shut = asyncio.Event()
 
     async def receive_text(self) -> str:
         while True:
             if not self._frames:
                 # The scripted "stop" frame is what ends a call, not exhaustion.
-                await asyncio.Event().wait()
+                # A close from the other side still has to unblock this read, the
+                # way a real Starlette socket does.
+                await self._shut.wait()
+                raise WebSocketDisconnect(code=1000)
             frame = self._frames.pop(0)
             if callable(frame):
                 await frame()
@@ -125,6 +141,7 @@ class FakeTwilio:
 
     async def close(self, code: int = 1000) -> None:
         self.closed = True
+        self._shut.set()
 
     def media_payloads(self) -> list[str]:
         return [p["media"]["payload"] for p in self.sent if p.get("event") == "media"]

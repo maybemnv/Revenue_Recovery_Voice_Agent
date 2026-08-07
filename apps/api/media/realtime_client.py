@@ -47,9 +47,38 @@ EV_OUTPUT_ITEM_ADDED = "response.output_item.added"
 EV_FUNCTION_CALL_ARGS_DONE = "response.function_call_arguments.done"
 EV_ERROR = "error"
 
+# Out-of-band classifier plumbing. The topic travels on `response.metadata` and
+# comes back on `response.done`, which is what lets the bridge tell a text-only
+# classifier verdict apart from the spoken turn it runs alongside.
+OOB_TOPIC_SENTIMENT = "sentiment"
+
 
 class RealtimeError(RuntimeError):
     pass
+
+
+def oob_topic(event: dict[str, Any]) -> str:
+    """The `metadata.topic` of a finished response, or "" for a normal turn."""
+    metadata = (event.get("response") or {}).get("metadata") or {}
+    topic = metadata.get("topic", "")
+    return topic if isinstance(topic, str) else ""
+
+
+def response_output_text(event: dict[str, Any]) -> str:
+    """Concatenate the text parts of a finished response.
+
+    Text-only responses put their payload in `output[].content[].text`. Tolerant
+    of shape drift on purpose: a classifier that cannot be parsed should leave
+    sentiment untouched, not raise inside the event pump.
+    """
+    chunks: list[str] = []
+    for item in (event.get("response") or {}).get("output") or []:
+        if not isinstance(item, dict):
+            continue
+        for part in item.get("content") or []:
+            if isinstance(part, dict) and isinstance(part.get("text"), str):
+                chunks.append(part["text"])
+    return "".join(chunks).strip()
 
 
 def build_session_update(cfg: ClientConfig, tools: list[dict[str, Any]]) -> dict[str, Any]:
