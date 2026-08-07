@@ -237,7 +237,7 @@ Place a real call. Interrupt the agent mid-sentence. Show the `barge_in` event a
 
 ### Registry
 
-- [ ] **[D0]** `tools/registry.py` — `ToolResult` and `ToolSpec` TypedDicts exactly as `docs/PRD.md:430-442`
+- [x] **[D0]** `tools/registry.py` — `ToolResult` is a TypedDict per `docs/PRD.md:430-442`; `ToolSpec` is a frozen dataclass rather than a TypedDict, which buys `masks_latency` and `to_openai_tool()` on the same object. Deliberate deviation, same fields.
 - [x] **[D0]** `ToolResult.status` is `ok | not_found | unavailable | denied` — never an exception, never an HTTP code
 - [x] **[D0]** `speak_hint` on every non-`ok` result. **This field is what stops the agent inventing a booking that did not happen** — it is not a nicety, it is the mechanism
 - [x] **[D0]** `ToolRegistry` maps name → schema, handler, `timeout_ms`, `idempotency_key`, filler phrase, `on_failure`
@@ -265,7 +265,7 @@ Place a real call. Interrupt the agent mid-sentence. Show the `barge_in` event a
 
 - [x] **[D0]** `tools/service_area.py` — pure lookup against `config.service_area.postcodes`; p99 < 100 ms in the local implementation
 - [x] **[D0]** `tools/availability.py` — Cal.com slot search, resolved into the client's timezone
-- [ ] **[D0]** **Verify Cal.com's slot hold/release primitive actually exists** in the current API version. The PRD chose Cal.com over Google Calendar specifically for this (`docs/PRD.md:84`) and flags it `[uncertain]`. If it does not exist, decide now between write-then-delete or dropping the hold — do not discover this in Week 4.
+- [x] **[D0]** **Cal.com slot hold/release resolved.** It exists: `POST /v2/slots/reservations` under `cal-api-version: 2024-09-04` returns `reservationUid` + `reservationUntil`; `DELETE` releases. Implemented in `apps/api/tools/calcom.py:115-158` as *best-effort* — a 404/405/501 flips `_holds_supported` off for the process and falls back to book-directly rather than dropping the booking. Live confirmation against a real key still pending.
 - [x] **[D0]** `tools/booking.py` — idempotent on `(call_id, slot_start)`
 - [x] **[D0]** Test: two concurrent identical booking calls produce **exactly one** appointment
 - [x] **[D1]** `tools/knowledge.py` — pgvector top-3 cosine, minimum score **0.35**
