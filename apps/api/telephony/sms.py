@@ -47,6 +47,13 @@ async def send_sms(
     behaviour stands.
     """
     settings = get_settings()
+    if not settings.twilio_account_sid or not settings.twilio_messaging_from:
+        # Do this before opening a claim transaction. Configuration can be
+        # repaired and replayed later; an unconfigured attempt never reached
+        # Twilio and must not permanently consume its dedupe key.
+        log.warning("sms_not_configured", to=mask_e164(to))
+        return False
+
     if client_id:
         async with session_scope() as session:
             if await is_suppressed(session, client_id=client_id, phone_e164=to):
@@ -61,10 +68,6 @@ async def send_sms(
                     log.info("sms_deduplicated", to=mask_e164(to), key=dedupe_key)
                     return False
                 send_id = claim
-
-    if not settings.twilio_account_sid or not settings.twilio_messaging_from:
-        log.warning("sms_not_configured", to=mask_e164(to))
-        return False
 
     url = f"https://api.twilio.com/2010-04-01/Accounts/{settings.twilio_account_sid}/Messages.json"
     data = {"To": to, "From": settings.twilio_messaging_from, "Body": body}

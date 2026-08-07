@@ -213,6 +213,32 @@ async def test_no_key_means_no_claim_and_no_dedupe(db: FakeConstraint) -> None:
     assert db.claimed == set()
 
 
+async def test_unconfigured_keyed_send_does_not_burn_claim(
+    db: FakeConstraint, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Repairing config must allow the same webhook replay to send later."""
+    settings = sms.get_settings()
+    monkeypatch.setattr(settings, "twilio_account_sid", None, raising=False)
+    twilio = FakeTwilio()
+
+    first = await sms.send_sms(
+        to="+13125551111", body="hi", client_id="acme", dedupe_key=MISSED, client=twilio
+    )
+
+    assert first is False
+    assert twilio.sends == 0
+    assert db.claimed == set()
+
+    monkeypatch.setattr(settings, "twilio_account_sid", "ACtest", raising=False)
+    second = await sms.send_sms(
+        to="+13125551111", body="hi", client_id="acme", dedupe_key=MISSED, client=twilio
+    )
+
+    assert second is True
+    assert twilio.sends == 1
+    assert db.claimed == {("acme", MISSED)}
+
+
 async def test_an_ambiguous_failure_is_not_retried_into_a_duplicate(
     db: FakeConstraint,
 ) -> None:

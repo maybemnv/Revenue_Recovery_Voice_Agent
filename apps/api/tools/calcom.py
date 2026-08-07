@@ -25,6 +25,7 @@ log = get_logger(__name__)
 
 SLOTS_API_VERSION = "2024-09-04"
 BOOKINGS_API_VERSION = "2024-08-13"
+RETRYABLE_METHODS = frozenset({"GET", "DELETE"})
 
 
 class CalcomError(RuntimeError):
@@ -91,10 +92,14 @@ class CalcomClient:
             async with httpx.AsyncClient(timeout=10.0) as client:
                 return await client.request(method, url, headers=headers, **kwargs)
 
-        # `create_booking` is safe to retry because every booking carries an
-        # idempotency key and `find_booking_by_key` can recover a winner, so a
-        # retried write cannot double-book.
-        return await request_with_retry(send, label=f"calcom {method} {path}", policy=IN_CALL)
+        # Cal.com stores the booking key in metadata but does not enforce it as
+        # an idempotency key. A lost response from a POST could therefore create
+        # a second booking or reservation. Only replay-safe methods use the
+        # transport retry helper; callers can explicitly recover a booking by
+        # key through `find_booking_by_key` when that is appropriate.
+        if method.upper() in RETRYABLE_METHODS:
+            return await request_with_retry(send, label=f"calcom {method} {path}", policy=IN_CALL)
+        return await send()
 
     # -- slots ------------------------------------------------------------
     async def search_slots(

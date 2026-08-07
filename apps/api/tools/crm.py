@@ -100,7 +100,9 @@ class HubSpotCRM:
     def _headers(self) -> dict[str, str]:
         return {"Authorization": f"Bearer {self._token}", "Content-Type": "application/json"}
 
-    async def _request(self, method: str, path: str, **kwargs: Any) -> httpx.Response:
+    async def _request(
+        self, method: str, path: str, *, retryable: bool = False, **kwargs: Any
+    ) -> httpx.Response:
         url = f"{self._base}{path}"
 
         async def send() -> httpx.Response:
@@ -109,12 +111,20 @@ class HubSpotCRM:
             async with httpx.AsyncClient(timeout=10.0) as client:
                 return await client.request(method, url, headers=self._headers, **kwargs)
 
-        return await request_with_retry(send, label=f"hubspot {method} {path}", policy=self._retry)
+        if retryable:
+            return await request_with_retry(
+                send, label=f"hubspot {method} {path}", policy=self._retry
+            )
+        # Contact and call creation have no provider idempotency key. A timeout
+        # or retryable 5xx may mean HubSpot accepted the write, so replaying the
+        # POST can create a duplicate remote object.
+        return await send()
 
     async def find_by_phone(self, phone_e164: str) -> CRMContact | None:
         response = await self._request(
             "POST",
             "/crm/v3/objects/contacts/search",
+            retryable=True,
             json={
                 "filterGroups": [
                     {"filters": [{"propertyName": "phone", "operator": "EQ", "value": phone_e164}]}
@@ -147,6 +157,7 @@ class HubSpotCRM:
             response = await self._request(
                 "PATCH",
                 f"/crm/v3/objects/contacts/{existing.crm_id}",
+                retryable=True,
                 json={"properties": properties},
             )
             created = False
