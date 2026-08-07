@@ -103,9 +103,10 @@ services there; follow [`docs/deployment.md`](docs/deployment.md).
 
 The API image intentionally separates dependency caching from application
 installation. It first installs locked third-party dependencies with
-`--no-install-project`, then copies `apps/` and runs a second frozen sync to
-install the project itself. This keeps the dependency layer cacheable while
-ensuring the application is installed before the container starts.
+`--no-install-project`, then copies `apps/`, `README.md`, and the runtime
+configuration before a second frozen sync installs the project itself. This
+keeps the dependency layer cacheable while ensuring Hatchling has the complete
+project metadata before the application starts.
 
 ## Provider and webhook setup
 
