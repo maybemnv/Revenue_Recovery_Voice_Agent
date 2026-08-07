@@ -48,7 +48,10 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
 
     _init_sentry(settings.sentry_dsn, settings.environment)
     yield
-    log.info("shutdown")
+    # Active calls get a chance to flush and close rather than being dropped
+    # mid-sentence. Bounded per call, so a hung socket cannot stall the exit.
+    drained = await gateway.shutdown_active_bridges()
+    log.info("shutdown", drained_calls=drained)
 
 
 def _init_sentry(dsn: str, environment: str) -> None:

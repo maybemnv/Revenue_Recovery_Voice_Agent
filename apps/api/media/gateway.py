@@ -12,6 +12,8 @@ which is what lets the bridge be tested against a fake socket and no database.
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import uuid
 from typing import Any
 
@@ -32,6 +34,40 @@ from apps.api.tools.registry import Invocation
 log = get_logger(__name__)
 
 router = APIRouter()
+
+# Live calls, so a process shutdown can ask each one to wind down instead of
+# dropping them mid-sentence. Guarded because the shutdown hook runs in the
+# lifespan task while call handlers mutate it concurrently.
+_active_bridges: set[MediaBridge] = set()
+_bridges_lock = asyncio.Lock()
+
+
+async def track_bridge(bridge: MediaBridge) -> None:
+    async with _bridges_lock:
+        _active_bridges.add(bridge)
+
+
+async def untrack_bridge(bridge: MediaBridge) -> None:
+    async with _bridges_lock:
+        _active_bridges.discard(bridge)
+
+
+async def shutdown_active_bridges() -> int:
+    """Ask every live call to drain, flush, and close. Best-effort, bounded.
+
+    Each bridge's own drain is capped at `DRAIN_TIMEOUT_SECONDS`, so this cannot
+    hang the shutdown. The handler tasks themselves finish once their sockets
+    close; uvicorn's `--timeout-graceful-shutdown` is what waits for them, which
+    the deployment runbook should set.
+    """
+    async with _bridges_lock:
+        bridges = list(_active_bridges)
+    for bridge in bridges:
+        with contextlib.suppress(Exception):
+            await bridge.shutdown()
+    if bridges:
+        log.info("shutdown_signalled_active_calls", count=len(bridges))
+    return len(bridges)
 
 
 @router.websocket("/media/{call_id}")
@@ -116,7 +152,11 @@ async def _run_media_stream(websocket: WebSocket, path_call_id: uuid.UUID | None
                 ),
                 hooks=hooks,
             )
-            stats = await bridge.run()
+            await track_bridge(bridge)
+            try:
+                stats = await bridge.run()
+            finally:
+                await untrack_bridge(bridge)
             barge_ins, tool_calls = stats.barge_ins, stats.tool_calls
         outcome = _classify(state)
     except WebSocketDisconnect:

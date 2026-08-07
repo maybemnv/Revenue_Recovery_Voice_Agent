@@ -37,6 +37,7 @@ from apps.api.media.realtime_client import (
     EV_FUNCTION_CALL_ARGS_DONE,
     EV_INPUT_TRANSCRIPT_COMPLETED,
     EV_OUTPUT_AUDIO_DELTA,
+    EV_OUTPUT_AUDIO_TRANSCRIPT_DELTA,
     EV_OUTPUT_AUDIO_TRANSCRIPT_DONE,
     EV_OUTPUT_ITEM_ADDED,
     EV_RESPONSE_CANCELLED,
@@ -54,6 +55,17 @@ log = get_logger(__name__)
 
 # How often the budget ceiling is re-checked. Well under the wrap-up margin.
 BUDGET_TICK_SECONDS = 2.0
+
+# Bounded so a slow or stalled Twilio socket cannot grow memory without limit.
+# Each entry is one audio delta; 200 of them is several seconds of speech, which
+# is already far further behind than a healthy socket ever gets. Past that,
+# dropping the oldest frame is strictly better than queueing until the process
+# dies — the caller hears a glitch instead of the call ending.
+OUTBOUND_QUEUE_MAX = 200
+
+# How long a graceful close waits for queued audio to reach Twilio before
+# giving up and closing anyway. A hung socket must not hold the call open.
+DRAIN_TIMEOUT_SECONDS = 2.0
 
 
 class TwilioSocket(Protocol):
@@ -84,11 +96,21 @@ class BridgeHooks:
 class BridgeStats:
     frames_from_caller: int = 0
     frames_to_caller: int = 0
+    frames_dropped: int = 0
     marks_sent: int = 0
     marks_acked: int = 0
     barge_ins: int = 0
     tool_calls: int = 0
     errors: list[str] = field(default_factory=list)
+
+
+@dataclass(frozen=True, slots=True)
+class OutboundAudio:
+    """One audio delta on its way to Twilio, with the mark that will follow it."""
+
+    mark_name: str
+    payload_b64: str
+    decoded_bytes: int
 
 
 class MediaBridge:
@@ -120,6 +142,9 @@ class MediaBridge:
         self._mark_seq = 0
         self._pending_response_start: float | None = None
         self._first_audio_latency_ms: int | None = None
+        self._outbound: asyncio.Queue[OutboundAudio] = asyncio.Queue(maxsize=OUTBOUND_QUEUE_MAX)
+        self._partial_agent_text = ""
+        self._closed = False
 
     # -- lifecycle --------------------------------------------------------
     async def run(self) -> BridgeStats:
@@ -127,10 +152,17 @@ class MediaBridge:
         tasks = [
             asyncio.create_task(self._pump_twilio(), name="pump_twilio"),
             asyncio.create_task(self._pump_openai(), name="pump_openai"),
+            asyncio.create_task(self._pump_outbound(), name="pump_outbound"),
             asyncio.create_task(self._watch_budget(), name="watch_budget"),
         ]
         try:
             done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+            self._stop.set()
+            # Let queued audio reach the caller before tearing the socket down.
+            # A frame already handed to us was, as far as the model is concerned,
+            # spoken; dropping it silently desyncs the transcript from what was
+            # heard. Bounded, because a hung socket must not hold the call open.
+            await self._drain_outbound()
             for task in pending:
                 task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
@@ -141,10 +173,66 @@ class MediaBridge:
                     log.warning("bridge_task_failed", task=task.get_name(), error=str(exc))
         finally:
             self._stop.set()
+            await self.aclose()
         return self.stats
 
     async def stop(self) -> None:
         self._stop.set()
+
+    async def shutdown(self) -> None:
+        """Graceful process shutdown for one live call.
+
+        Sets the stop flag, flushes whatever audio is still queued (bounded),
+        then closes both sockets — which is what actually unblocks a pump that
+        is waiting for a frame that will never come. `run()`'s own `finally`
+        then runs the same teardown, and `aclose()` is idempotent, so calling
+        this from a shutdown hook cannot double-close or double-flush.
+        """
+        self._stop.set()
+        await self._drain_outbound()
+        await self.aclose()
+
+    async def aclose(self) -> None:
+        """Flush the last partial turn, then close both sockets. Idempotent.
+
+        Called from `run()`'s `finally` and again by graceful shutdown, so it has
+        to tolerate being run twice — and it must never raise, because it runs on
+        the path that finalises the call row.
+        """
+        if self._closed:
+            return
+        self._closed = True
+
+        await self._flush_partial_turn()
+
+        for name, closer in (("realtime", self.realtime.close), ("twilio", self.twilio.close)):
+            try:
+                await closer()
+            except Exception as exc:  # a dead socket is the normal case here
+                log.debug("socket_close_failed", socket=name, error=type(exc).__name__)
+
+    async def _drain_outbound(self) -> None:
+        try:
+            await asyncio.wait_for(self._outbound.join(), timeout=DRAIN_TIMEOUT_SECONDS)
+        except TimeoutError:
+            log.warning("outbound_drain_timeout", queued=self._outbound.qsize())
+
+    async def _flush_partial_turn(self) -> None:
+        """Persist a turn the model was still speaking when the call ended.
+
+        Without this a caller who hangs up mid-answer leaves a transcript that
+        stops one turn early, and the dashboard shows a call that ended for no
+        visible reason.
+        """
+        text = self._partial_agent_text.strip()
+        self._partial_agent_text = ""
+        if not text:
+            return
+        self.state.agent_turns += 1
+        try:
+            await self._record_turn("agent", text)
+        except Exception:
+            log.exception("final_turn_flush_failed")
 
     @property
     def elapsed_seconds(self) -> float:
@@ -231,7 +319,14 @@ class MediaBridge:
             elif kind == EV_INPUT_TRANSCRIPT_COMPLETED:
                 await self._on_caller_transcript(event.get("transcript", "") or "")
 
+            elif kind == EV_OUTPUT_AUDIO_TRANSCRIPT_DELTA:
+                # Accumulated only so a call that ends mid-answer still persists
+                # what the agent had said. The `.done` event below is the normal
+                # path and clears this.
+                self._partial_agent_text += event.get("delta", "") or ""
+
             elif kind == EV_OUTPUT_AUDIO_TRANSCRIPT_DONE:
+                self._partial_agent_text = ""
                 await self._on_agent_transcript(event.get("transcript", "") or "")
 
             elif kind == EV_FUNCTION_CALL_ARGS_DONE:
@@ -250,35 +345,98 @@ class MediaBridge:
                 log.warning("realtime_error", error=detail)
 
     async def _send_audio(self, delta_b64: str) -> None:
-        """Forward one audio delta and stamp a mark behind it."""
+        """Queue one audio delta. The outbound pump does the actual writing.
+
+        Enqueueing rather than writing inline is what makes the queue bounded:
+        a Twilio socket that stops draining backs up here, where the depth is
+        visible and capped, instead of inside an unbounded transport buffer.
+        """
         if not delta_b64 or not self.stream_sid:
             return
         self._mark_seq += 1
-        mark_name = f"m{self._mark_seq}"
+        item = OutboundAudio(
+            mark_name=f"m{self._mark_seq}",
+            payload_b64=delta_b64,
+            # Byte length of the decoded μ-law, which is what the ledger counts in.
+            decoded_bytes=_b64_decoded_size(delta_b64),
+        )
+        try:
+            self._outbound.put_nowait(item)
+        except asyncio.QueueFull:
+            # The socket is not keeping up. Drop the oldest frame rather than
+            # the newest: stale audio is the least useful thing in the queue,
+            # and unbounded growth is the failure this ceiling exists to prevent.
+            with contextlib.suppress(asyncio.QueueEmpty):
+                self._outbound.get_nowait()
+                self._outbound.task_done()
+            self.stats.frames_dropped += 1
+            log.warning("outbound_queue_full", dropped=self.stats.frames_dropped)
+            with contextlib.suppress(asyncio.QueueFull):
+                self._outbound.put_nowait(item)
 
-        await self.twilio.send_json(
-            {
-                "event": "media",
-                "streamSid": self.stream_sid,
-                "media": {"payload": delta_b64},
-            }
-        )
-        await self.twilio.send_json(
-            {"event": "mark", "streamSid": self.stream_sid, "mark": {"name": mark_name}}
-        )
-        # Byte length of the decoded μ-law, which is what the ledger counts in.
-        self.ledger.on_chunk_sent(mark_name, _b64_decoded_size(delta_b64))
-        if self._pending_response_start is not None and self._first_audio_latency_ms is None:
-            self._first_audio_latency_ms = int(
-                (time.perf_counter() - self._pending_response_start) * 1000
-            )
-        self.stats.frames_to_caller += 1
-        self.stats.marks_sent += 1
+    async def _pump_outbound(self) -> None:
+        """Write queued audio to Twilio, marking and ledgering each frame.
+
+        `on_chunk_sent` is called here, at the point of the actual write, not at
+        enqueue time. A frame dropped by a barge-in never reaches this method, so
+        it never enters the ledger — which is what keeps `audio_end_ms` a
+        statement about what the caller heard rather than what we intended.
+        """
+        while True:
+            item = await self._outbound.get()
+            try:
+                await self.twilio.send_json(
+                    {
+                        "event": "media",
+                        "streamSid": self.stream_sid,
+                        "media": {"payload": item.payload_b64},
+                    }
+                )
+                await self.twilio.send_json(
+                    {
+                        "event": "mark",
+                        "streamSid": self.stream_sid,
+                        "mark": {"name": item.mark_name},
+                    }
+                )
+                self.ledger.on_chunk_sent(item.mark_name, item.decoded_bytes)
+                if (
+                    self._pending_response_start is not None
+                    and self._first_audio_latency_ms is None
+                ):
+                    self._first_audio_latency_ms = int(
+                        (time.perf_counter() - self._pending_response_start) * 1000
+                    )
+                self.stats.frames_to_caller += 1
+                self.stats.marks_sent += 1
+            finally:
+                self._outbound.task_done()
+
+    def _discard_queued_audio(self) -> int:
+        """Drop everything not yet written. Returns how many frames went.
+
+        Called before Twilio's `clear` on a barge-in: our own queue has to go
+        first, or the pump keeps writing frames after the flush and the caller
+        hears the agent talking over them anyway.
+        """
+        dropped = 0
+        while True:
+            try:
+                self._outbound.get_nowait()
+            except asyncio.QueueEmpty:
+                return dropped
+            self._outbound.task_done()
+            dropped += 1
 
     # -- state transitions ------------------------------------------------
     async def _on_barge_in(self) -> None:
         if self.barge_in is None:
             return
+        # Local queue first, then Twilio's buffer. Reversing these means the pump
+        # writes fresh audio in behind the `clear` that was meant to silence it.
+        discarded = self._discard_queued_audio()
+        if discarded:
+            log.debug("barge_in_discarded_queued_audio", frames=discarded)
         result = await self.barge_in.on_speech_started()
         if result.truncated:
             self.stats.barge_ins += 1

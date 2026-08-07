@@ -24,6 +24,7 @@ import pytest
 from apps.api.config.schema import ClientConfig
 from apps.api.domain.state import CallState
 from apps.api.media.bridge import (
+    OUTBOUND_QUEUE_MAX,
     BridgeHooks,
     MediaBridge,
     _b64_decoded_size,
@@ -54,6 +55,7 @@ class FakeRealtime:
         self.appended: list[str] = []
         self.feed: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
         self.idle = asyncio.Event()
+        self.closed = False
         for event in script or []:
             self.feed.put_nowait(event)
 
@@ -74,6 +76,9 @@ class FakeRealtime:
 
     async def say_out_of_band(self, line: str) -> None:
         await self.create_response({"input": [], "instructions": f'Say exactly: "{line}"'})
+
+    async def close(self) -> None:
+        self.closed = True
 
     async def events(self) -> Any:
         while True:
@@ -438,3 +443,144 @@ async def test_stop_frame_ends_the_call(config: ClientConfig) -> None:
     stats = await _run(bridge)
 
     assert stats.errors == []
+
+
+# -- lifecycle: close, flush, bounded queue ----------------------------------
+
+
+async def test_stop_closes_both_sockets(config: ClientConfig) -> None:
+    """A `stop` that leaves a socket open leaks a connection per call."""
+    twilio = FakeTwilio([_start_frame(), {"event": "stop"}])
+    realtime = FakeRealtime()
+
+    await _run(_bridge(config, twilio, realtime))
+
+    assert twilio.closed is True
+    assert realtime.closed is True
+
+
+async def test_queued_audio_is_flushed_before_the_sockets_close(
+    config: ClientConfig,
+) -> None:
+    """Audio handed to the bridge before `stop` still reaches the caller."""
+    deltas = [_ulaw_frame(seed) for seed in (5, 15, 25)]
+    realtime = FakeRealtime([{"type": EV_OUTPUT_AUDIO_DELTA, "delta": d} for d in deltas])
+    twilio = FakeTwilio([_start_frame(), settled(realtime), {"event": "stop"}])
+
+    stats = await _run(_bridge(config, twilio, realtime))
+
+    assert twilio.media_payloads() == deltas
+    assert stats.frames_to_caller == 3
+    assert stats.frames_dropped == 0
+
+
+async def test_partial_agent_turn_is_flushed_when_the_caller_hangs_up(
+    config: ClientConfig,
+) -> None:
+    """A caller who hangs up mid-answer must not lose the transcript so far."""
+    realtime = FakeRealtime(
+        [
+            {"type": "response.output_audio_transcript.delta", "delta": "Your technician "},
+            {"type": "response.output_audio_transcript.delta", "delta": "can be there at two"},
+        ]
+    )
+    twilio = FakeTwilio([_start_frame(), settled(realtime), {"event": "stop"}])
+    turns: list[tuple[str, str]] = []
+
+    async def on_turn(role: str, text: str, at_ms: int, meta: dict[str, Any]) -> None:
+        turns.append((role, text))
+
+    bridge = _bridge(config, twilio, realtime, BridgeHooks(on_turn=on_turn))
+    await _run(bridge)
+
+    assert turns == [("agent", "Your technician can be there at two")]
+    assert bridge.state.agent_turns == 1
+
+
+async def test_completed_turn_is_not_flushed_twice(config: ClientConfig) -> None:
+    """`.done` clears the partial buffer, so teardown must not re-persist it."""
+    realtime = FakeRealtime(
+        [
+            {"type": "response.output_audio_transcript.delta", "delta": "I can help."},
+            {"type": "response.output_audio_transcript.done", "transcript": "I can help."},
+        ]
+    )
+    twilio = FakeTwilio([_start_frame(), settled(realtime), {"event": "stop"}])
+    turns: list[tuple[str, str]] = []
+
+    async def on_turn(role: str, text: str, at_ms: int, meta: dict[str, Any]) -> None:
+        turns.append((role, text))
+
+    bridge = _bridge(config, twilio, realtime, BridgeHooks(on_turn=on_turn))
+    await _run(bridge)
+
+    assert turns == [("agent", "I can help.")]
+    assert bridge.state.agent_turns == 1
+
+
+async def test_outbound_queue_is_bounded_and_drops_oldest(config: ClientConfig) -> None:
+    """A stalled socket must cost frames, not unbounded memory."""
+    overflow = OUTBOUND_QUEUE_MAX + 25
+    bridge = _bridge(config, FakeTwilio([]), FakeRealtime())
+    bridge.stream_sid = STREAM_SID
+
+    # Enqueue without ever running the pump: this is a socket that has stalled.
+    for i in range(overflow):
+        await bridge._send_audio(_ulaw_frame(i % 256))
+
+    assert bridge._outbound.qsize() == OUTBOUND_QUEUE_MAX
+    assert bridge.stats.frames_dropped == overflow - OUTBOUND_QUEUE_MAX
+    # Oldest dropped, newest kept: the surviving head is not mark m1.
+    assert bridge._outbound.get_nowait().mark_name != "m1"
+
+
+async def test_barge_in_discards_queued_audio_before_clear(config: ClientConfig) -> None:
+    """Our own queue must be dropped first, or the pump writes past the `clear`."""
+    bridge = _bridge(config, FakeTwilio([]), FakeRealtime())
+    bridge.stream_sid = STREAM_SID
+    for i in range(5):
+        await bridge._send_audio(_ulaw_frame(i))
+    assert bridge._outbound.qsize() == 5
+
+    dropped = bridge._discard_queued_audio()
+
+    assert dropped == 5
+    assert bridge._outbound.qsize() == 0
+
+
+async def test_shutdown_closes_a_live_call_gracefully(config: ClientConfig) -> None:
+    """The graceful-shutdown path: drain, flush, close — without a `stop` frame."""
+    realtime = FakeRealtime()
+    twilio = FakeTwilio([_start_frame()])  # no stop: the process is going down
+    bridge = _bridge(config, twilio, realtime)
+
+    task = asyncio.create_task(bridge.run())
+    await asyncio.sleep(0)  # let the pumps start
+    await bridge.shutdown()
+    stats = await asyncio.wait_for(task, timeout=5)
+
+    assert twilio.closed is True
+    assert realtime.closed is True
+    assert stats.errors == []
+
+
+async def test_aclose_is_idempotent(config: ClientConfig) -> None:
+    """`run()`'s finally and the shutdown hook both call it."""
+    realtime = FakeRealtime()
+    twilio = FakeTwilio([_start_frame(), {"event": "stop"}])
+    bridge = _bridge(config, twilio, realtime)
+    turns: list[tuple[str, str]] = []
+
+    async def on_turn(role: str, text: str, at_ms: int, meta: dict[str, Any]) -> None:
+        turns.append((role, text))
+
+    bridge.hooks = BridgeHooks(on_turn=on_turn)
+    bridge._partial_agent_text = "half a sentence"
+
+    await _run(bridge)
+    await bridge.aclose()
+    await bridge.aclose()
+
+    # Flushed exactly once despite three teardowns.
+    assert turns == [("agent", "half a sentence")]
+
