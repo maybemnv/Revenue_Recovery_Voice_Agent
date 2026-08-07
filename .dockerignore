@@ -1,0 +1,29 @@
+# The API image copies `apps/`, which contains the Next.js workspace. Without
+# this, every build ships `apps/web/node_modules` and `apps/web/.next` into a
+# Python image that has no use for them, and pays to upload them as build context.
+apps/web/node_modules
+apps/web/.next
+node_modules
+
+# Secrets never enter the build context. `.env.example` is copied explicitly by
+# the Dockerfile; the real `.env` is not, and this makes that structural.
+.env
+.env.*
+!.env.example
+
+.git
+.github
+.venv
+__pycache__
+**/__pycache__
+*.pyc
+.pytest_cache
+.mypy_cache
+.ruff_cache
+htmlcov
+.coverage
+
+tests
+docs
+*.md
+!README.md

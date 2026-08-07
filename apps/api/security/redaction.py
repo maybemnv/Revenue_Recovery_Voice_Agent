@@ -8,6 +8,7 @@ digits, but the prompt is not the control - this module is.
 from __future__ import annotations
 
 import re
+from typing import Any
 
 # 13-19 digits, optionally separated by spaces or dashes. Speech-to-text renders
 # spoken card numbers as space-separated groups, so the separator class matters
@@ -52,6 +53,25 @@ def redact_pan(text: str) -> str:
 
 def contains_pan(text: str) -> bool:
     return redact_pan(text) != text
+
+
+def redact_structure(value: Any) -> Any:
+    """Apply `redact_pan` to every string inside a JSON-shaped value.
+
+    Tool arguments are model-authored and reach us as JSONB, and at least one
+    schema asks for the caller's question in their own words. That makes
+    `tool_invocations.arguments` a caller-text sink like the transcript, so it
+    gets the same treatment at the same boundary. Keys are redacted too: a model
+    is free to emit `{"4111 1111 1111 1111": ...}` and a key is stored just as
+    durably as a value.
+    """
+    if isinstance(value, str):
+        return redact_pan(value)
+    if isinstance(value, dict):
+        return {redact_structure(k): redact_structure(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [redact_structure(item) for item in value]
+    return value
 
 
 def redact_phone(value: str) -> str:

@@ -25,6 +25,7 @@ from apps.api.db.models import KBChunk
 from apps.api.db.repository import insert_kb_chunks
 from apps.api.db.session import session_scope
 from apps.api.observability.logging import configure_logging, get_logger
+from apps.api.resilience import BACKGROUND
 from apps.api.tools.embeddings import embed_batch
 
 log = get_logger(__name__)
@@ -100,7 +101,9 @@ async def ingest(client_id: str, source_dir: Path, *, replace: bool = True) -> i
     embedded: list[tuple[str, str, list[float]]] = []
     for start in range(0, len(pending), EMBED_BATCH_SIZE):
         batch = pending[start : start + EMBED_BATCH_SIZE]
-        vectors = await embed_batch([content for _, content in batch])
+        # Nobody is on the line during an ingest, and a rate limit part-way
+        # through a large corpus is worth waiting out rather than failing.
+        vectors = await embed_batch([content for _, content in batch], policy=BACKGROUND)
         if len(vectors) != len(batch):
             raise RuntimeError(
                 f"embedding returned {len(vectors)} vectors for {len(batch)} chunks"

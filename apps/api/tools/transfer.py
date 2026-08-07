@@ -6,9 +6,12 @@ whisper is served by `/telephony/whisper`, which reads the context off the query
 string rather than out of shared state — the transfer must survive this worker
 process dying between the redirect and Twilio's callback.
 
-3,000 ms budget, `escalate` on failure, and deliberately no retry: the registry
-only grants a second attempt to `retry_once` and `degrade`. Redirecting a live
-call twice is how a caller ends up hearing hold music from two places at once.
+3,000 ms budget and `escalate` on failure. The registry grants no second attempt
+here — only `retry_once` and `degrade` get one — because redirecting a live call
+twice is how a caller ends up hearing hold music from two places at once. The
+transport retry underneath is `UNSAFE_WRITE`, which is compatible with that: it
+fires only on proof the redirect never reached Twilio (connection refused, or a
+429/503 refusal), never on an ambiguous timeout that might have landed.
 """
 
 from __future__ import annotations
@@ -21,6 +24,7 @@ import httpx
 
 from apps.api.config.schema import ClientConfig
 from apps.api.observability.logging import get_logger
+from apps.api.resilience import UNSAFE_WRITE, request_with_retry
 from apps.api.security.redaction import mask_e164
 from apps.api.settings import get_settings
 from apps.api.tools.registry import ToolResult, ToolSpec, failure, ok
@@ -86,11 +90,17 @@ async def redirect_call(
     )
     auth = (settings.twilio_account_sid, settings.twilio_auth_token)
     data = {"Twiml": twiml}
-    if client is not None:
-        response = await client.post(url, data=data, auth=auth)
-    else:
+    async def send() -> httpx.Response:
+        if client is not None:
+            return await client.post(url, data=data, auth=auth)
         async with httpx.AsyncClient(timeout=5.0) as owned:
-            response = await owned.post(url, data=data, auth=auth)
+            return await owned.post(url, data=data, auth=auth)
+
+    try:
+        response = await request_with_retry(send, label="twilio redirect", policy=UNSAFE_WRITE)
+    except httpx.HTTPError as exc:
+        log.warning("transfer_redirect_error", error=type(exc).__name__, call_sid=call_sid)
+        return False
     if response.status_code >= 400:
         log.warning("transfer_redirect_failed", status=response.status_code, call_sid=call_sid)
         return False

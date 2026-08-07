@@ -13,6 +13,7 @@ holds. [P] in the plan: not demo-blocking, but the demo says it exists.
 
 from __future__ import annotations
 
+import uuid
 from collections.abc import Awaitable, Callable
 from typing import Any
 
@@ -20,6 +21,7 @@ import httpx
 
 from apps.api.config.schema import ClientConfig
 from apps.api.observability.logging import get_logger
+from apps.api.resilience import IN_CALL, request_with_retry
 from apps.api.security.redaction import mask_e164
 from apps.api.settings import get_settings
 from apps.api.tools.registry import ToolResult, ToolSpec, failure, ok
@@ -58,6 +60,7 @@ async def create_payment_link(
     *,
     amount_cents: int,
     description: str,
+    idempotency_key: str | None = None,
     client: httpx.AsyncClient | None = None,
 ) -> str | None:
     """A one-off Payment Link. Returns the URL, or None on any failure."""
@@ -75,13 +78,23 @@ async def create_payment_link(
     if settings.stripe_price_id:
         form = {"line_items[0][price]": settings.stripe_price_id, "line_items[0][quantity]": "1"}
 
-    headers = {"Authorization": f"Bearer {settings.stripe_api_key}"}
+    # One key per logical request, reused across retries. That is what makes the
+    # retry below safe: Stripe collapses the replay onto the first link instead
+    # of minting a second one, and two genuinely separate requests still get
+    # separate keys.
+    headers = {
+        "Authorization": f"Bearer {settings.stripe_api_key}",
+        "Idempotency-Key": idempotency_key or str(uuid.uuid4()),
+    }
     url = "https://api.stripe.com/v1/payment_links"
-    if client is not None:
-        response = await client.post(url, data=form, headers=headers)
-    else:
+
+    async def send() -> httpx.Response:
+        if client is not None:
+            return await client.post(url, data=form, headers=headers)
         async with httpx.AsyncClient(timeout=5.0) as owned:
-            response = await owned.post(url, data=form, headers=headers)
+            return await owned.post(url, data=form, headers=headers)
+
+    response = await request_with_retry(send, label="stripe payment_links", policy=IN_CALL)
 
     if response.status_code >= 400:
         log.warning("stripe_payment_link_failed", status=response.status_code)
@@ -95,6 +108,7 @@ async def send_payment_link(
     config: ClientConfig,
     send_sms: SmsSender,
     from_e164: str = "",
+    call_id: str = "",
     amount_usd: float | None = None,
     description: str = "Service payment",
     http_client: httpx.AsyncClient | None = None,
@@ -108,14 +122,22 @@ async def send_payment_link(
     if amount_cents <= 0 and not get_settings().stripe_price_id:
         return failure("unavailable", DEGRADE_HINT, {"reason": "no amount and no configured price"})
 
+    # Same key on both writes: Stripe collapses a retried link creation, and the
+    # SMS claim collapses a retried send. `run_tool` gives every `degrade` tool a
+    # second attempt, so both are reachable on one caller request.
+    key = f"payment_link:{call_id}:{amount_cents}" if call_id else None
+
     link = await create_payment_link(
-        amount_cents=amount_cents, description=description, client=http_client
+        amount_cents=amount_cents,
+        description=description,
+        client=http_client,
+        idempotency_key=key,
     )
     if link is None:
         return failure("unavailable", DEGRADE_HINT, {"reason": "stripe link creation failed"})
 
     body = f"{config.display_name}: secure payment link for {description} — {link}"
-    delivered = await send_sms(to=from_e164, body=body)
+    delivered = await send_sms(to=from_e164, body=body, dedupe_key=key)
     if not delivered:
         return failure("unavailable", DEGRADE_HINT, {"reason": "sms delivery failed"})
 

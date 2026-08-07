@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 
 from apps.api.db.models import Call
 from apps.api.observability.logging import get_logger
+from apps.api.resilience import BACKGROUND, request_with_retry_sync
 from apps.api.settings import get_settings
 
 log = get_logger(__name__)
@@ -35,12 +36,16 @@ def delete_remote_recording(recording_sid: str, *, client: httpx.Client | None =
         f"https://api.twilio.com/2010-04-01/Accounts/"
         f"{settings.twilio_account_sid}/Recordings/{recording_sid}.json"
     )
-    try:
+    def send() -> httpx.Response:
         if client is not None:
-            response = client.delete(url, auth=_twilio_auth())
-        else:
-            with httpx.Client(timeout=15.0) as owned:
-                response = owned.delete(url, auth=_twilio_auth())
+            return client.delete(url, auth=_twilio_auth())
+        with httpx.Client(timeout=15.0) as owned:
+            return owned.delete(url, auth=_twilio_auth())
+
+    try:
+        # A DELETE is idempotent, and this one is a consent obligation: retrying
+        # a 503 here is the difference between honouring it and only logging it.
+        response = request_with_retry_sync(send, label="twilio recording delete", policy=BACKGROUND)
     except httpx.HTTPError as exc:
         log.warning("recording_delete_error", error=type(exc).__name__)
         return False

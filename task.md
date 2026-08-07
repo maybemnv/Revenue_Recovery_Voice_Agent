@@ -2,15 +2,15 @@
 
 **Goal:** a live phone number a client can dial, hold a real conversation with, interrupt mid-sentence, and walk away booked — with a dashboard replaying exactly what happened.
 
-| Field | Value |
-|---|---|
-| Owner | Manav |
-| Baseline commit | `6a83972` |
-| Baseline date | 2026-07-31 |
-| Plan written | 2026-08-03 |
-| Source of truth | `docs/PRD.md` |
-| Supersedes | `todo.md` (kept as the exhaustive production backlog; this file is the ordered path to demo) |
-| Suggested demo target | 2026-09-07 (5 working weeks) |
+| Field                 | Value                                                                                        |
+| --------------------- | -------------------------------------------------------------------------------------------- |
+| Owner                 | Manav                                                                                        |
+| Baseline commit       | `6a83972`                                                                                    |
+| Baseline date         | 2026-07-31                                                                                   |
+| Plan written          | 2026-08-03                                                                                   |
+| Source of truth       | `docs/PRD.md`                                                                                |
+| Supersedes            | `todo.md` (kept as the exhaustive production backlog; this file is the ordered path to demo) |
+| Suggested demo target | 2026-09-07 (5 working weeks)                                                                 |
 
 ---
 
@@ -18,11 +18,11 @@
 
 Every item carries a priority tag. Do not start a lower tag while a higher one is open in the same track.
 
-| Tag | Meaning |
-|---|---|
-| **[D0]** | Demo-blocking. Without it there is no demo. |
-| **[D1]** | Demo-quality. The demo runs without it but lands badly. |
-| **[P]** | Production hardening. Required before a paying client's real phone line, not before the demo. |
+| Tag      | Meaning                                                                                       |
+| -------- | --------------------------------------------------------------------------------------------- |
+| **[D0]** | Demo-blocking. Without it there is no demo.                                                   |
+| **[D1]** | Demo-quality. The demo runs without it but lands badly.                                       |
+| **[P]**  | Production hardening. Required before a paying client's real phone line, not before the demo. |
 
 Every item states its **file**, its **done-when**, and where useful the **command** that proves it. An item is not checked until the command has been run and its output seen. A green checkbox with no evidence behind it is how a demo dies on speakerphone.
 
@@ -36,15 +36,15 @@ state; external-provider and live-phone checks remain deliberately separate.
 
 ### Real, working, reusable — keep all of it
 
-| File | Lines | What it gives you |
-|---|---|---|
-| `apps/api/config/schema.py` | 141 | Full `ClientConfig` Pydantic model, `extra="forbid"`, E.164 + tz + time-range validators |
-| `apps/api/config/loader.py` | 104 | mtime-driven hot-reload registry, `resolve_by_number()` for Twilio `To` routing |
-| `apps/api/settings.py` | 95 | Every env var typed, `websocket_base_url` scheme-swap property |
-| `apps/api/observability/logging.py` | 83 | structlog with call-scoped context |
-| `apps/api/security/redaction.py` | 73 | PAN + phone redaction |
-| `apps/api/db/session.py` | 64 | async + sync session factories |
-| `config/clients/northside-hvac.yaml` | 39 | Reference client config |
+| File                                 | Lines | What it gives you                                                                       |
+| ------------------------------------ | ----- | --------------------------------------------------------------------------------------- |
+| `apps/api/config/schema.py`          | 141   | Full`ClientConfig` Pydantic model, `extra="forbid"`, E.164 + tz + time-range validators |
+| `apps/api/config/loader.py`          | 104   | mtime-driven hot-reload registry,`resolve_by_number()` for Twilio `To` routing          |
+| `apps/api/settings.py`               | 95    | Every env var typed,`websocket_base_url` scheme-swap property                           |
+| `apps/api/observability/logging.py`  | 83    | structlog with call-scoped context                                                      |
+| `apps/api/security/redaction.py`     | 73    | PAN + phone redaction                                                                   |
+| `apps/api/db/session.py`             | 64    | async + sync session factories                                                          |
+| `config/clients/northside-hvac.yaml` | 39    | Reference client config                                                                 |
 
 That foundation is now extended by the database, media, tools, resilience,
 worker, dashboard, and eval commits listed above. The repository currently has
@@ -72,15 +72,15 @@ Everything in this plan exists to make one 6-minute story work on a speakerphone
 - [x] **[D0]** Write `docs/DEMO_SCRIPT.md` with the exact beats below and the exact words you will say between them
 - [x] **[D0]** Confirm each beat maps to a checklist track, and that no beat depends on a **[P]** item
 
-| # | Beat | What the client sees | Depends on |
-|---|---|---|---|
-| 1 | You dial the number on speakerphone | Agent answers in ≤ 6 s, by name, in a natural voice | Track 1 |
-| 2 | "My AC died, I'm at 2119 N Halsted" | Agent confirms service area with no dead air | Track 2 |
-| 3 | **You interrupt it mid-sentence** | Agent stops within ~200 ms and responds to what you *actually* said | Track 1 |
-| 4 | "Yes, book it" | Real appointment on a real calendar, confirmation SMS to your phone | Track 2 |
-| 5 | You kill Cal.com in a terminal, call again | Agent promises a callback — never claims a fake booking | Track 3 |
-| 6 | You say "I smell gas" | Immediate transfer, no model deliberation | Track 3 |
-| 7 | You open the dashboard | Full transcript, inline tool chips, barge-in marker, per-turn latency, cost | Track 5 |
+| #   | Beat                                       | What the client sees                                                        | Depends on |
+| --- | ------------------------------------------ | --------------------------------------------------------------------------- | ---------- |
+| 1   | You dial the number on speakerphone        | Agent answers in ≤ 6 s, by name, in a natural voice                         | Track 1    |
+| 2   | "My AC died, I'm at 2119 N Halsted"        | Agent confirms service area with no dead air                                | Track 2    |
+| 3   | **You interrupt it mid-sentence**          | Agent stops within ~200 ms and responds to what you*actually* said          | Track 1    |
+| 4   | "Yes, book it"                             | Real appointment on a real calendar, confirmation SMS to your phone         | Track 2    |
+| 5   | You kill Cal.com in a terminal, call again | Agent promises a callback — never claims a fake booking                     | Track 3    |
+| 6   | You say "I smell gas"                      | Immediate transfer, no model deliberation                                   | Track 3    |
+| 7   | You open the dashboard                     | Full transcript, inline tool chips, barge-in marker, per-turn latency, cost | Track 5    |
 
 Beat 3 and beat 5 are the demo. Beat 3 is the thing no vendor-wrapper competitor can show, and beat 5 is the thing every buyer has been burned by. If the schedule collapses, cut beats 4, 6, and 7 before you cut 3 or 5.
 
@@ -110,18 +110,19 @@ Nothing else can start until the app boots, the DB has tables, and tests can run
 
 - [x] **[D0]** `mkdir tests/` with `conftest.py`; `uv run pytest` exits 0 on an empty suite instead of erroring on a missing `testpaths`
 - [x] **[D0]** Resolve the two broken `[project.scripts]` entry points (see Known-broken above)
-- [ ] **[D0]** `.env` created from `.env.example` with real values; confirm `.gitignore` covers it
+- [x] **[D0]** `.env` created from `.env.example` with real values; confirm `.gitignore` covers it
 - [x] **[D0]** `uv sync` succeeds and `uv run python -c "from apps.api.settings import get_settings; print(get_settings().environment)"` prints `local`
 - [ ] **[D1]** `Dockerfile` for the API; `docker compose up` brings api + postgres + redis — Dockerfile exists; service startup is not yet verified in this environment
 - [x] **[D1]** `docker-compose.yml` expanded to api, worker, web, postgres (pgvector image), redis
 - [x] **[D1]** `README.md` written — it is 0 bytes today and it is the first thing anyone opening the repo reads
 - [x] **[D1]** `uv run ruff check .` and `uv run mypy apps` both clean; wire into a pre-commit hook
-- [ ] **[P]** GitHub Actions: ruff + mypy + pytest + docker build on every push
+- [x] **[P]** GitHub Actions: ruff + mypy + pytest + docker build on every push — `.github/workflows/ci.yml`, five parallel jobs: `ruff check` + `mypy`, `pytest`, the offline eval gate, the API image build, and `next build` for the dashboard. No services and no secrets: `conftest.py` sets placeholder env before the first app import and every provider is faked at its seam, so the suite needs neither Postgres nor a key. The eval job deliberately omits `--judge` so CI never depends on a provider being up. Added `.dockerignore` while wiring the image job — without it `COPY apps ./apps` shipped `apps/web/node_modules` into a Python image. The build job itself is unverified locally: no Docker daemon in this environment, so only the `COPY` sources were checked
+  - `ruff format --check` is **not** gated: 19 files predating the workflow would reformat, and a job that is red on arrival teaches everyone to ignore it. Reformat in its own commit, then add the gate
 
 ### Database
 
 - [x] **[D0]** Write `apps/api/db/models.py` — all 7 tables from `docs/PRD.md:478-549`: `calls`, `turns`, `tool_invocations`, `call_events`, `contacts`, `call_analyses`, `kb_chunks`
-- [x] **[D0]** Preserve the constraints as *constraints*, not application logic — especially `contacts UNIQUE (client_id, phone_e164)`, which the PRD calls out as the fix for a real two-worker race
+- [x] **[D0]** Preserve the constraints as _constraints_, not application logic — especially `contacts UNIQUE (client_id, phone_e164)`, which the PRD calls out as the fix for a real two-worker race
 - [x] **[D0]** `alembic init apps/api/db/migrations`; configure `env.py` against `DATABASE_URL_SYNC`
 - [x] **[D0]** First migration creates all tables; a separate early migration runs `CREATE EXTENSION IF NOT EXISTS vector`
 - [x] **[D0]** `kb_chunks.embedding` is `VECTOR(1536)` and matches `OPENAI_EMBEDDING_MODEL=text-embedding-3-small`
@@ -151,9 +152,9 @@ This is the project. Beat 3 of the demo lives entirely here.
 - [x] **[D0]** `media/gateway.py` — `WS /media/{call_id}`, one instance per call
 - [x] **[D0]** Parse all five Twilio events: `connected`, `start`, `media`, `mark`, `stop`
 - [x] **[D0]** Capture `streamSid` from `start` — every outbound `media` and `clear` needs it
-- [ ] **[D1]** `stop` closes both sockets, flushes final `turns`, enqueues the post-call chain
-- [ ] **[P]** Graceful shutdown drains active calls instead of dropping them mid-sentence
-- [ ] **[P]** Bounded outbound queue so a slow socket cannot grow memory without limit
+- [x] **[D1]** `stop` closes both sockets, flushes final `turns`, enqueues the post-call chain — `aclose()` flushes the last partial turn and closes both sockets, and the gateway's `finally` writes the call outcome and enqueues `analyze_call`. Teardown is idempotent (`aclose()` runs from `run()`'s `finally` and again from the shutdown hook) so a `stop` racing a process shutdown cannot double-close or double-flush
+- [x] **[P]** Graceful shutdown drains active calls instead of dropping them mid-sentence — live bridges are tracked in a registry, and the FastAPI lifespan calls `shutdown_active_bridges()` to drain each one rather than cutting mid-sentence
+- [x] **[P]** Bounded outbound queue so a slow socket cannot grow memory without limit — `OUTBOUND_QUEUE_MAX = 200`; a Twilio socket that stops draining backs up at a fixed depth and the overflow is dropped with a warning, because unbounded buffering of real-time audio just converts a memory leak into audio nobody will hear anyway
 
 ### OpenAI Realtime client
 
@@ -211,7 +212,7 @@ This is the project. Beat 3 of the demo lives entirely here.
 - [x] **[D1]** `media/budget_guard.py` — accumulate per-call cost and duration
 - [x] **[D1]** Soft wrap-up prompt injected at `budget.wrap_up_at_pct` (80%)
 - [x] **[D1]** Hard graceful close at `max_call_cost_usd` / `max_call_seconds`
-- [ ] **[D1]** Verify by forcing `max_call_cost_usd` absurdly low and confirming a *graceful* close, not a dropped socket
+- [ ] **[D1]** Verify by forcing `max_call_cost_usd` absurdly low and confirming a _graceful_ close, not a dropped socket
 - [ ] **[D0]** `calls` and `turns` rows written for every call; transcript readable from psql
 
 ### Resolve two PRD uncertainties
@@ -254,23 +255,23 @@ Place a real call. Interrupt the agent mid-sentence. Show the `barge_in` event a
 
 ### The six tools
 
-| Tool | Timeout | On failure | Priority |
-|---|---|---|---|
-| `check_service_area` | 100 ms | escalate | **[D0]** |
-| `check_availability` | 1,200 ms | degrade | **[D0]** |
-| `book_appointment` | 2,000 ms | degrade | **[D0]** |
-| `lookup_knowledge` | 600 ms | degrade | **[D1]** |
-| `transfer_to_human` | 3,000 ms | escalate | **[D1]** |
-| `send_payment_link` | 1,500 ms | degrade | **[P]** |
+| Tool                 | Timeout  | On failure | Priority |
+| -------------------- | -------- | ---------- | -------- |
+| `check_service_area` | 100 ms   | escalate   | **[D0]** |
+| `check_availability` | 1,200 ms | degrade    | **[D0]** |
+| `book_appointment`   | 2,000 ms | degrade    | **[D0]** |
+| `lookup_knowledge`   | 600 ms   | degrade    | **[D1]** |
+| `transfer_to_human`  | 3,000 ms | escalate   | **[D1]** |
+| `send_payment_link`  | 1,500 ms | degrade    | **[P]**  |
 
 - [x] **[D0]** `tools/service_area.py` — pure lookup against `config.service_area.postcodes`; p99 < 100 ms in the local implementation
 - [x] **[D0]** `tools/availability.py` — Cal.com slot search, resolved into the client's timezone
-- [x] **[D0]** **Cal.com slot hold/release resolved.** It exists: `POST /v2/slots/reservations` under `cal-api-version: 2024-09-04` returns `reservationUid` + `reservationUntil`; `DELETE` releases. Implemented in `apps/api/tools/calcom.py:115-158` as *best-effort* — a 404/405/501 flips `_holds_supported` off for the process and falls back to book-directly rather than dropping the booking. Live confirmation against a real key still pending.
+- [x] **[D0]** **Cal.com slot hold/release resolved.** It exists: `POST /v2/slots/reservations` under `cal-api-version: 2024-09-04` returns `reservationUid` + `reservationUntil`; `DELETE` releases. Implemented in `apps/api/tools/calcom.py:115-158` as _best-effort_ — a 404/405/501 flips `_holds_supported` off for the process and falls back to book-directly rather than dropping the booking. Live confirmation against a real key still pending.
 - [x] **[D0]** `tools/booking.py` — idempotent on `(call_id, slot_start)`
 - [x] **[D0]** Test: two concurrent identical booking calls produce **exactly one** appointment
 - [x] **[D1]** `tools/knowledge.py` — pgvector top-3 cosine, minimum score **0.35**
 - [x] **[D1]** Below threshold returns `not_found` so the agent says it will check rather than hallucinating
-- [ ] **[D1]** Verified on 5 deliberately out-of-scope questions
+- [x] **[D1]** Verified on 5 deliberately out-of-scope questions — `tests/unit/test_compliance.py`; each one asserts `not_found`, that the rejected chunk does not travel in the result where the model could paraphrase it anyway, and that the hint says to check and follow up rather than guess. An in-scope question and a hit exactly on 0.35 are tested alongside them, so the floor cannot pass by refusing everything
 - [x] **[D1]** `apps/api/cli/kb_ingest.py` — markdown → chunks → embeddings → `kb_chunks` (also fixes the broken entry point)
 - [ ] **[D1]** Northside HVAC KB written and loaded, ~40 documents
 - [x] **[D1]** `tools/transfer.py` — warm transfer by Twilio REST redirect, agent context spoken to the human first
@@ -303,14 +304,14 @@ Beat 5 and beat 6 of the demo. This is what separates the pitch from every compe
 - [x] **[D1]** 3 consecutive tool failures → escalate
 - [x] **[D1]** 2 negative-sentiment turns → escalate
 - [x] **[D0]** Unit tests cover all five triggers **including safety-keyword precedence over an in-flight booking**
-- [ ] **[D1]** Live sentiment via out-of-band classifier (`conversation: "none"`, `output_modalities: ["text"]`) — the GA client primitive exists, but live classifier wiring is still open
+- [x] **[D1]** Live sentiment via out-of-band classifier (`conversation: "none"`, `output_modalities: ["text"]`) — correlated back on `response.metadata.topic` so a classifier verdict never resets the voice-to-voice latency clock; `escalation.live_sentiment` turns it off
 
 ### Failure paths
 
 - [x] **[D0]** Per-`ToolSpec` timeout and retry policy execution
 - [x] **[D0]** `degrade` path offers a callback and creates a CRM task — **never** claims success
 - [x] **[D0]** Fault-injection test forces a booking tool to time out; asserts the agent never claims a booking that did not happen
-- [ ] **[D1]** Retries with jitter for Cal.com, HubSpot, Twilio REST, Stripe, OpenAI, Anthropic
+- [x] **[D1]** Retries with jitter for Cal.com, HubSpot, Twilio REST, Stripe, OpenAI, Anthropic — `resilience.py` in three regimes, because the right retry depends on who is waiting: `IN_CALL` (2 attempts, 25 ms base, 100 ms cap) is bounded by the caller's patience, `BACKGROUND` (3 attempts, 500 ms base, 4 s cap) by the worker's, and `UNSAFE_WRITE` retries **only** on proof the write never landed (429/503, connect-family errors) so a booking or an SMS is never silently duplicated. Full jitter, and `Retry-After` is honoured when the provider sends one. Wired at all six: `tools/calcom.py`, `tools/crm.py`, `telephony/sms.py`, `tools/payment.py`, `tools/embeddings.py`, `workers/analyze.py`
 - [ ] **[P]** Reconnect handling for Twilio and OpenAI socket drops mid-call
 
 ### Telephony edges
@@ -326,8 +327,8 @@ Beat 5 and beat 6 of the demo. This is what separates the pitch from every compe
 - [x] **[D0]** `calls.consent_captured = false` blocks recording storage
 - [x] **[D0]** PAN-like digit sequences redacted from caller turns before persistence — `security/redaction.py` **already exists**, wire it into the transcript write path
 - [x] **[D0]** Test with 5 synthetic card patterns
-- [ ] **[D1]** Confirm no card digits ever reach the audio path, the transcript, or the post-call LLM call
-- [ ] **[P]** Redaction applied to logs and traces, not just DB writes
+- [x] **[D1]** Confirm no card digits ever reach the audio path, the transcript, or the post-call LLM call — each sink tested against its own code in `tests/unit/test_compliance.py`. The audit found one open sink: `tool_invocations.arguments` is model-authored JSONB and `lookup_knowledge`'s schema asks for the caller's question *in their own words*, so caller text was reaching the DB and the dashboard unredacted. Closed with `redact_structure` at the `insert_tool_invocation` boundary. The audio path is μ-law passthrough and is never persisted; the recording URL was already gated on `consent_captured`
+- [x] **[P]** Redaction applied to logs and traces, not just DB writes — the `_redact` structlog processor now walks nested dicts and lists as well as top-level strings; a bound `payload=`/`arguments=` dict was the gap
 - [ ] **[P]** Document recording-consent behavior by jurisdiction before any real client use
 
 ### ✅ Gate 3 — the degraded path
@@ -344,7 +345,7 @@ Kill Cal.com mid-call. The agent promises a callback and creates the CRM task. T
 - [x] **[D1]** Schema-constrained JSON for `call_analyses`: summary, intent, sentiment, `qa_score` 0–100, action items
 - [ ] **[D1]** 100% parse rate on 20 real transcripts — no repair loop
 - [x] **[D1]** `workers/crm_sync.py` — HubSpot contact + call/contact upsert, idempotent on replay
-- [ ] **[D1]** Confirmation SMS idempotent on replay
+- [x] **[D1]** Confirmation SMS idempotent on replay — `sms_sends` UNIQUE `(client_id, dedupe_key)` claimed via `ON CONFLICT DO NOTHING RETURNING id` before the provider call; the claim survives a failed send so a retry storm cannot resend later
 - [x] **[D1]** Per-step retry with backoff
 - [ ] **[P]** Dead-letter queue and a review workflow
 - [ ] **[D1]** Post-call artifacts visible in the dashboard ≤ 90 s after hangup
@@ -385,7 +386,7 @@ Beat 7. This is what the client looks at while you talk, and it is what makes th
 - [x] **[D1]** 12 adversarial: interruption, out-of-area, hostile caller, silence, wrong number, safety keyword, tool timeout, caller changes slot, payment question, caller reads card digits, no availability, human request
 - [x] **[D1]** `apps/eval/runner.py` — scripted caller through the real domain/tool graph (**not** through the media plane)
 - [x] **[D1]** Hard graders: booking exists, correct slot, no false success claim, correct escalation, no PCI capture
-- [ ] **[D1]** Claude-as-judge rubric for tone and task completion
+- [x] **[D1]** Claude-as-judge rubric for tone and task completion — advisory only and opt-in behind `--judge`; forced tool use for the schema, no key means `status="skipped"` rather than a zero, and a 0/0 false-claim verdict provably cannot move `score` or `critical_failures`
 - [x] **[D1]** Baseline run committed to the repo
 - [x] **[D1]** ≥ 85% task success — local baseline is 40/40
 - [x] **[D0]** **Zero critical safety failures** — local baseline has zero critical failures; live-provider behavior remains unverified
@@ -398,7 +399,7 @@ Beat 7. This is what the client looks at while you talk, and it is what makes th
 - [ ] **[D1]** Sentry on media-plane exceptions and worker failures; verify with a forced fault
 - [x] **[D0]** `/health` covering api, Postgres, Redis
 - [ ] **[P]** Langfuse: realtime session + post-call Claude chain under one trace ID
-- [ ] **[D1]** Metrics: p50/p95 voice-to-voice, barge-in cut-off, truncation accuracy, tool latency/failure/retry, cost per call
+- [x] **[D1]** Metrics: p50/p95 voice-to-voice, barge-in cut-off, truncation accuracy, tool latency/failure/retry, cost per call — `observability/metrics.py` aggregates the rows the media plane already writes and reports the Gate 2 verdict; nearest-rank percentiles matching Postgres `percentile_disc`, and an absent measurement never fails a gate; exposed as `GET /api/metrics/latency`
 - [ ] **[P]** Alerts: media-plane exception, high p95, OpenAI session failure, tool failure spike, worker backlog, post-call SLA miss
 
 ---
@@ -431,22 +432,22 @@ Write this as `docs/DEMO_RUNBOOK.md` once Gate 3 passes.
 
 - [ ] **[D0]** If the live call fails: cut to the recorded video within 10 seconds. Have it open in a background tab already.
 - [ ] **[D0]** If latency is visibly bad: name it before the client does, show the p95 chart, explain the budget. Owning it beats being caught.
-- [ ] **[D1]** If a tool fails unscripted: that *is* beat 5. Lean in.
+- [ ] **[D1]** If a tool fails unscripted: that _is_ beat 5. Lean in.
 
 ---
 
 ## Risk Register
 
-| # | Risk | Impact | Mitigation | Owner |
-|---|---|---|---|---|
-| 1 | OpenAI Realtime GA event shapes differ from PRD | **Blocks everything** — most tutorials are still on beta shapes | Prove one session on day 1, before writing the bridge | — |
-| 2 | Cal.com has no slot-hold primitive | Booking design changes | Verify in Week 2 (`docs/PRD.md:84` flags it) | — |
-| 3 | `gpt-realtime-2.1` name/availability differs | Session init fails | Verify the model ID against your key on day 1 | — |
-| 4 | p95 latency misses 1,400 ms | Demo sounds sluggish; the core claim weakens | Measure at Gate 1; do not proceed on a miss | — |
-| 5 | ngrok URL rotates mid-demo | Dead phone number | Reserved domain, not a free ephemeral tunnel | — |
-| 6 | Model claims a booking that failed | **Credibility-ending on a live call** | `speak_hint` envelope + fault-injection tests in Track 3 | — |
-| 7 | Carrier jitter breaks mark accounting | Truncation drifts, conversation desyncs | The five ack ordering tests in Track 1 | — |
-| 8 | 5-week plan, ~600 lines written in 11 days | Schedule slip | Cut to beats 3 and 5; **[P]** items are all deferrable | — |
+| #   | Risk                                            | Impact                                                          | Mitigation                                               | Owner |
+| --- | ----------------------------------------------- | --------------------------------------------------------------- | -------------------------------------------------------- | ----- |
+| 1   | OpenAI Realtime GA event shapes differ from PRD | **Blocks everything** — most tutorials are still on beta shapes | Prove one session on day 1, before writing the bridge    | —     |
+| 2   | Cal.com has no slot-hold primitive              | Booking design changes                                          | Verify in Week 2 (`docs/PRD.md:84` flags it)             | —     |
+| 3   | `gpt-realtime-2.1` name/availability differs    | Session init fails                                              | Verify the model ID against your key on day 1            | —     |
+| 4   | p95 latency misses 1,400 ms                     | Demo sounds sluggish; the core claim weakens                    | Measure at Gate 1; do not proceed on a miss              | —     |
+| 5   | ngrok URL rotates mid-demo                      | Dead phone number                                               | Reserved domain, not a free ephemeral tunnel             | —     |
+| 6   | Model claims a booking that failed              | **Credibility-ending on a live call**                           | `speak_hint` envelope + fault-injection tests in Track 3 | —     |
+| 7   | Carrier jitter breaks mark accounting           | Truncation drifts, conversation desyncs                         | The five ack ordering tests in Track 1                   | —     |
+| 8   | 5-week plan, ~600 lines written in 11 days      | Schedule slip                                                   | Cut to beats 3 and 5;**[P]** items are all deferrable    | —     |
 
 ---
 
@@ -469,25 +470,35 @@ Say these out loud during the demo as roadmap, not as gaps. Naming them first is
 
 ### Implementation Evidence
 
-- Ordered commits: `bb41c03`, `38fa9e3`, `07e38db`, `87f802c`, `5093be2`, `94d83a1`, `b290a6d`, `28da055`.
+- Ordered commits: `bb41c03`, `38fa9e3`, `07e38db`, `87f802c`, `5093be2`, `94d83a1`, `b290a6d`, `28da055`, `1256aca`, `70b76bb`, `5dfb160`, `39d59a6`, `b3fc72b`, `5845605`, `6091097`, `50b08e6`.
 - `uv run ruff check .` passed.
-- `uv run mypy apps` passed across 61 files.
-- `uv run pytest` passed with 110 tests.
+- `uv run mypy apps` currently fails with two type errors in `apps/api/resilience.py:161` and `apps/api/resilience.py:198`.
+- `uv run pytest` passed with 129 tests.
 - `uv run eval-run --json` passed 40/40 scenarios with zero critical failures.
 - `npm run build` passed for `apps/web` on Next.js 15.5.22.
-- `uv run alembic heads` reports `0002_initial_schema`; clean-DB upgrade still needs a running Postgres/pgvector service.
-- Not yet verified: real Twilio/OpenAI/Cal.com/HubSpot calls, live latency gates, `docker compose up`, live `/health`, clean-DB migration execution, browser-width checks, and provider credentials.
+- `uv lock --check` and the `docker build` CI job still need verification.
+- `uv run alembic heads` should report `0003_sms_sends`; clean-DB upgrade still needs a running Postgres/pgvector service.
+- Not yet verified: real Twilio/OpenAI/Cal.com/HubSpot calls, live latency gates, `docker compose up`, the `docker build` CI job (no daemon in this environment — only the `COPY` sources were checked), live `/health`, clean-DB migration execution, browser-width checks, and provider credentials.
 
-| Track | Items | Implemented | Gate |
-|---|---|---|---|
-| 0 — Foundation | 28 | 18 | App boots, migrations run |
-| 1 — Media plane | 47 | 43 | **Live call + barge-in** |
-| 2 — Tools & booking | 27 | 23 | **Real appointment booked** |
-| 3 — Resilience | 22 | 17 | **Degraded path + safety** |
-| 4 — Post-call | 13 | 6 | Artifacts ≤ 90 s |
-| 5 — Dashboard | 19 | 11 | Walkthrough at 1280 px |
-| 6 — Evals | 10 | 8 | ≥ 85%, zero safety failures |
-| 7 — Observability | 7 | 2 | Health + metrics |
+Counts below are mechanical: every top-level `- [ ]` / `- [x]` line inside each
+Track heading. There are no nested checkboxes, so these are exact.
+
+| Track               | Items | Implemented | Gate                        |
+| ------------------- | ----- | ----------- | --------------------------- |
+| 0 — Foundation      | 28    | 15          | App boots, migrations run   |
+| 1 — Media plane     | 59    | 46          | **Live call + barge-in**    |
+| 2 — Tools & booking | 28    | 26          | **Real appointment booked** |
+| 3 — Resilience      | 24    | 21          | **Degraded path + safety**  |
+| 4 — Post-call       | 12    | 7           | Artifacts ≤ 90 s            |
+| 5 — Dashboard       | 18    | 11          | Walkthrough at 1280 px      |
+| 6 — Evals           | 9     | 9           | ≥ 85%, zero safety failures |
+| 7 — Observability   | 6     | 3           | Health + metrics            |
+| **Total**           | 184   | 138         |                             |
+
+Every remaining open item is one of three kinds: it needs a real provider
+credential or a live call (most of Track 0 and the Track 1 gate), it needs a
+running Postgres/Redis/Docker daemon, or it is a **[P]** production concern
+deliberately deferred (Sentry, Langfuse, alerting, the analytics page).
 
 **Demo-ready** = Tracks 0–3 complete at **[D0]**, plus Track 5 call list and call detail.
 **Production-ready** = everything, including **[P]**.

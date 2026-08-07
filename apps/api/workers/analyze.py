@@ -25,6 +25,7 @@ from sqlalchemy.orm import Session
 
 from apps.api.db.models import Call, CallAnalysis, Turn
 from apps.api.observability.logging import get_logger
+from apps.api.resilience import BACKGROUND, request_with_retry_sync
 from apps.api.settings import get_settings
 
 log = get_logger(__name__)
@@ -134,16 +135,21 @@ def call_claude(transcript: str, *, client: httpx.Client | None = None) -> dict[
         "anthropic-version": "2023-06-01",
         "content-type": "application/json",
     }
-    try:
+    def send() -> httpx.Response:
         if client is not None:
-            response = client.post(
+            return client.post(
                 "https://api.anthropic.com/v1/messages", json=payload, headers=headers
             )
-        else:
-            with httpx.Client(timeout=60.0) as owned:
-                response = owned.post(
-                    "https://api.anthropic.com/v1/messages", json=payload, headers=headers
-                )
+        with httpx.Client(timeout=60.0) as owned:
+            return owned.post(
+                "https://api.anthropic.com/v1/messages", json=payload, headers=headers
+            )
+
+    try:
+        # Analysis is a read as far as our data is concerned — a retried call
+        # costs tokens, not correctness, and the Celery task's own retry is a far
+        # more expensive way to recover from a single 529.
+        response = request_with_retry_sync(send, label="anthropic messages", policy=BACKGROUND)
     except httpx.HTTPError as exc:
         log.warning("analysis_request_failed", error=type(exc).__name__)
         return dict(FAILED_ANALYSIS)

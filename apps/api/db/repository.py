@@ -3,7 +3,9 @@
 Two rules encoded here rather than at each call site:
 
 * every caller-authored string passes through `redact_pan` before it is written,
-  so PAN data cannot reach the transcript even if the model repeats it back;
+  so PAN data cannot reach the transcript even if the model repeats it back —
+  including model-authored tool arguments, which carry caller text verbatim and
+  are served back out by the dashboard;
 * `upsert_contact` leans on the `contacts` UNIQUE constraint via `ON CONFLICT`
   rather than SELECT-then-INSERT, because the concurrent-insert race is real.
 """
@@ -18,8 +20,16 @@ from sqlalchemy import func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from apps.api.db.models import Call, CallEvent, Contact, KBChunk, ToolInvocation, Turn
-from apps.api.security.redaction import redact_pan
+from apps.api.db.models import (
+    Call,
+    CallEvent,
+    Contact,
+    KBChunk,
+    SmsSend,
+    ToolInvocation,
+    Turn,
+)
+from apps.api.security.redaction import redact_pan, redact_structure
 
 
 async def create_call(
@@ -133,7 +143,7 @@ async def insert_tool_invocation(
         ToolInvocation(
             call_id=call_id,
             name=name,
-            arguments=arguments,
+            arguments=redact_structure(arguments),
             result_status=result_status,
             latency_ms=latency_ms,
             attempt=attempt,
@@ -205,6 +215,42 @@ async def mark_opted_out(
         )
     )
     await session.execute(stmt)
+
+
+async def claim_sms_send(
+    session: AsyncSession, *, client_id: str, to_e164: str, dedupe_key: str
+) -> int | None:
+    """Reserve the right to send one message. `None` means someone already has it.
+
+    `ON CONFLICT DO NOTHING ... RETURNING id` is the whole mechanism: the winner
+    gets an id, every replay gets `None`, and the race between two workers is
+    settled by the UNIQUE constraint rather than by a SELECT that can be stale by
+    the time it returns.
+    """
+    stmt = (
+        pg_insert(SmsSend)
+        .values(client_id=client_id, to_e164=to_e164, dedupe_key=dedupe_key)
+        .on_conflict_do_nothing(constraint="uq_sms_sends_client_key")
+        .returning(SmsSend.id)
+    )
+    result = await session.execute(stmt)
+    return result.scalar_one_or_none()
+
+
+async def mark_sms_delivered(
+    session: AsyncSession, *, send_id: int, provider_sid: str | None
+) -> None:
+    """Record that the provider accepted it. The claim stands either way.
+
+    A failed send deliberately leaves the row behind rather than releasing it: a
+    Twilio retry storm resending a failed message is the more expensive mistake,
+    and the row is the audit trail for why a caller never got a text.
+    """
+    await session.execute(
+        update(SmsSend)
+        .where(SmsSend.id == send_id)
+        .values(delivered=True, provider_sid=provider_sid)
+    )
 
 
 async def is_suppressed(session: AsyncSession, *, client_id: str, phone_e164: str) -> bool:

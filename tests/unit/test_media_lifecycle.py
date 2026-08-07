@@ -16,8 +16,6 @@ import json
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-import pytest
-
 from apps.api.config.schema import ClientConfig
 from apps.api.domain.state import CallState
 from apps.api.media.bridge import (
@@ -33,6 +31,10 @@ from apps.api.media.realtime_client import (
 from apps.api.tools.registry import RegistryBundle, ToolRegistry
 
 STREAM_SID = "MZlifecycle"
+
+# Long enough to absorb scheduler jitter on a loaded box, short enough that a
+# genuinely stuck bridge fails the test instead of hanging the suite.
+CONDITION_TIMEOUT_SECONDS = 5.0
 
 Step = Callable[[], Awaitable[None]]
 
@@ -96,6 +98,17 @@ class FakeRealtime:
 
     async def say_out_of_band(self, line: str) -> None:
         await self.create_response({"input": [], "instructions": f'Say exactly: "{line}"'})
+
+    async def classify_out_of_band(self, instructions: str, topic: str) -> None:
+        await self.create_response(
+            {
+                "conversation": "none",
+                "input": [],
+                "output_modalities": ["text"],
+                "instructions": instructions,
+                "metadata": {"topic": topic},
+            }
+        )
 
     async def close(self) -> None:
         self.closed = True
@@ -179,8 +192,12 @@ async def test_queued_audio_is_drained_before_close(config: ClientConfig) -> Non
 
 async def test_queue_is_bounded_and_drops_oldest(config: ClientConfig) -> None:
     """A stalled socket fills the queue; further audio drops the oldest frame."""
+    overflow = 50
     realtime = FakeRealtime(
-        [{"type": EV_OUTPUT_AUDIO_DELTA, "delta": _delta(i)} for i in range(OUTBOUND_QUEUE_MAX + 50)]
+        [
+            {"type": EV_OUTPUT_AUDIO_DELTA, "delta": _delta(i)}
+            for i in range(OUTBOUND_QUEUE_MAX + overflow)
+        ]
     )
     twilio = GatedTwilio([_start_frame(), settled(realtime), {"event": "stop"}])
     bridge = _bridge(config, twilio, realtime)
@@ -191,8 +208,8 @@ async def test_queue_is_bounded_and_drops_oldest(config: ClientConfig) -> None:
     try:
         # Give the pumps time to fill the queue past its ceiling.
         await _wait_until(lambda: bridge.stats.frames_dropped > 0)
-        assert bridge.stats.frames_dropped == 50
-        assert bridge._outbound.qsize() <= OUTBOUND_QUEUE_MAX  # noqa: SLF001
+        assert bridge.stats.frames_dropped == overflow
+        assert bridge._outbound.qsize() <= OUTBOUND_QUEUE_MAX
     finally:
         twilio.gate.set()
         await asyncio.wait_for(task, timeout=5)
@@ -200,8 +217,8 @@ async def test_queue_is_bounded_and_drops_oldest(config: ClientConfig) -> None:
     # The frames that survived were the *newest* OUTBOUND_QUEUE_MAX.
     written = [p["media"]["payload"] for p in twilio.sent if p.get("event") == "media"]
     assert len(written) == OUTBOUND_QUEUE_MAX
-    assert written[0] == _delta(50)
-    assert written[-1] == _delta(OUTBOUND_QUEUE_MAX + 49)
+    assert written[0] == _delta(overflow)
+    assert written[-1] == _delta(OUTBOUND_QUEUE_MAX + overflow - 1)
 
 
 async def test_barge_in_discards_queued_audio_before_clear(config: ClientConfig) -> None:
@@ -221,7 +238,7 @@ async def test_barge_in_discards_queued_audio_before_clear(config: ClientConfig)
         # Synchronise on the barge-in itself, not on a queue-depth proxy.
         await _wait_until(lambda: any(p.get("event") == "clear" for p in twilio.sent))
         assert bridge.stats.barge_ins >= 0  # the cut happened; queue now empty
-        assert bridge._outbound.qsize() == 0  # noqa: SLF001
+        assert bridge._outbound.qsize() == 0
     finally:
         twilio.gate.set()
         await asyncio.wait_for(task, timeout=5)
@@ -287,12 +304,15 @@ async def test_double_close_is_harmless(config: ClientConfig) -> None:
     assert realtime.closed is True
 
 
-async def _wait_until(predicate: Callable[[], bool], timeout: float = 5.0) -> None:
-    async def _poll() -> None:
-        for _ in range(int(timeout / 0.01)):
-            if predicate():
-                return
-            await asyncio.sleep(0.01)
-        raise AssertionError("condition not reached within timeout")
+async def _wait_until(predicate: Callable[[], bool]) -> None:
+    """Poll until `predicate` holds, or let the deadline fail the test.
 
-    await asyncio.wait_for(_poll(), timeout=timeout)
+    A fixed bound rather than a per-call one: every condition here is reached in
+    milliseconds when the bridge is healthy, so anything approaching the ceiling
+    is a hang, not a slow machine.
+    """
+    deadline = asyncio.get_running_loop().time() + CONDITION_TIMEOUT_SECONDS
+    while not predicate():
+        if asyncio.get_running_loop().time() >= deadline:
+            raise AssertionError("condition not reached within timeout")
+        await asyncio.sleep(0.01)

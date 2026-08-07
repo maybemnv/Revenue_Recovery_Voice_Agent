@@ -1,0 +1,102 @@
+name: CI
+
+# Every push and every PR. The three quality jobs run in parallel because none
+# of them depends on another's output, so a lint error surfaces in ~30s rather
+# than behind a full test run.
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+# A new push to the same branch makes the in-flight run obsolete.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # `uv sync --frozen` fails rather than silently resolving a different tree, so
+  # CI tests the same versions a developer has locally.
+  UV_FROZEN: "1"
+
+jobs:
+  lint:
+    name: ruff + mypy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync --frozen
+      # `ruff check` only. Repo-wide `ruff format` drift predates this workflow;
+      # gating on it would make CI red on arrival and teach everyone to ignore it.
+      - name: ruff
+        run: uv run ruff check .
+      - name: mypy
+        run: uv run mypy apps
+
+  test:
+    name: pytest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync --frozen
+      # No services and no secrets: `tests/conftest.py` sets placeholder env vars
+      # before the first app import, and every provider is faked at its seam. A
+      # test that needs Postgres or a real key is a test that does not belong here.
+      - name: pytest
+        run: uv run pytest -q
+
+  eval:
+    name: offline eval gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync --frozen
+      # Exits non-zero below 0.85 or on any critical failure. Deliberately run
+      # without `--judge`: the graders are deterministic, and the Claude judge is
+      # advisory and would make this job depend on a provider being up.
+      - name: scenarios
+        run: uv run python -m apps.eval.runner
+
+  docker:
+    name: docker build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      # Build only — no push, no registry credentials. The question this answers
+      # is whether the image still assembles, which is where `uv sync --frozen`
+      # against a stale lock file shows up.
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  web:
+    name: next build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - run: npm ci
+      # `next build` lints and type-checks the whole app on the way through,
+      # which is the only thing standing between a bad `page.tsx` and a broken
+      # dashboard. `npm run lint` is not a separate step on purpose: `next lint`
+      # is deprecated in 15 and prompts for ESLint setup, so it would hang here.
+      - run: npm run build

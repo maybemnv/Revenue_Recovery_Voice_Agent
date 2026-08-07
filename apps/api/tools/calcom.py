@@ -18,12 +18,14 @@ from typing import Any
 import httpx
 
 from apps.api.observability.logging import get_logger
+from apps.api.resilience import IN_CALL, request_with_retry
 from apps.api.settings import get_settings
 
 log = get_logger(__name__)
 
 SLOTS_API_VERSION = "2024-09-04"
 BOOKINGS_API_VERSION = "2024-08-13"
+RETRYABLE_METHODS = frozenset({"GET", "DELETE"})
 
 
 class CalcomError(RuntimeError):
@@ -83,10 +85,21 @@ class CalcomClient:
     ) -> httpx.Response:
         url = f"{self._base}{path}"
         headers = self._headers(api_version)
-        if self._client is not None:
-            return await self._client.request(method, url, headers=headers, **kwargs)
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            return await client.request(method, url, headers=headers, **kwargs)
+
+        async def send() -> httpx.Response:
+            if self._client is not None:
+                return await self._client.request(method, url, headers=headers, **kwargs)
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                return await client.request(method, url, headers=headers, **kwargs)
+
+        # Cal.com stores the booking key in metadata but does not enforce it as
+        # an idempotency key. A lost response from a POST could therefore create
+        # a second booking or reservation. Only replay-safe methods use the
+        # transport retry helper; callers can explicitly recover a booking by
+        # key through `find_booking_by_key` when that is appropriate.
+        if method.upper() in RETRYABLE_METHODS:
+            return await request_with_retry(send, label=f"calcom {method} {path}", policy=IN_CALL)
+        return await send()
 
     # -- slots ------------------------------------------------------------
     async def search_slots(

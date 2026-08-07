@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from apps.api.config.loader import ClientConfigNotFound, get_registry
 from apps.api.db.models import Call, CallAnalysis, CallEvent, ToolInvocation, Turn
 from apps.api.db.session import get_session
+from apps.api.observability import metrics as metrics_mod
 from apps.api.routers.auth import require_viewer
 from apps.api.security.redaction import mask_e164
 
@@ -28,9 +29,7 @@ SessionDep = Annotated[AsyncSession, Depends(get_session)]
 
 
 def _call_summary(call: Call) -> dict[str, Any]:
-    duration = (
-        int((call.ended_at - call.started_at).total_seconds()) if call.ended_at else None
-    )
+    duration = int((call.ended_at - call.started_at).total_seconds()) if call.ended_at else None
     return {
         "id": str(call.id),
         "client_id": call.client_id,
@@ -123,9 +122,9 @@ async def get_call_detail(call_id: uuid.UUID, session: SessionDep) -> dict[str, 
     )
     invocations = list(
         await session.scalars(
-            select(ToolInvocation).where(ToolInvocation.call_id == call_id).order_by(
-                ToolInvocation.id
-            )
+            select(ToolInvocation)
+            .where(ToolInvocation.call_id == call_id)
+            .order_by(ToolInvocation.id)
         )
     )
     analysis = await session.get(CallAnalysis, call_id)
@@ -143,9 +142,7 @@ async def get_call_detail(call_id: uuid.UUID, session: SessionDep) -> dict[str, 
             }
             for t in turns
         ],
-        "events": [
-            {"at_ms": e.at_ms, "kind": e.kind, "payload": e.payload} for e in events
-        ],
+        "events": [{"at_ms": e.at_ms, "kind": e.kind, "payload": e.payload} for e in events],
         "tool_invocations": [
             {
                 "name": i.name,
@@ -191,9 +188,9 @@ async def metrics(
                 func.count().filter(subq.c.outcome == "booked").label("booked"),
                 func.count().filter(subq.c.outcome == "escalated").label("escalated"),
                 func.coalesce(func.sum(subq.c.cost_cents), 0).label("cost_cents"),
-                func.avg(
-                    func.extract("epoch", subq.c.ended_at - subq.c.started_at)
-                ).label("avg_seconds"),
+                func.avg(func.extract("epoch", subq.c.ended_at - subq.c.started_at)).label(
+                    "avg_seconds"
+                ),
             ).select_from(subq)
         )
     ).one()
@@ -216,3 +213,90 @@ async def metrics(
         "avg_duration_seconds": round(float(row.avg_seconds), 1) if row.avg_seconds else None,
         "p50_response_latency_ms": int(p50_latency) if p50_latency is not None else None,
     }
+
+
+@router.get("/metrics/latency")
+async def latency_metrics(
+    session: SessionDep,
+    client_id: Annotated[str | None, Query()] = None,
+    days: Annotated[int, Query(ge=1, le=90)] = 7,
+) -> dict[str, Any]:
+    """The Gate 2 report: voice-to-voice, barge-in cut-off, truncation, tools, cost.
+
+    Percentiles are computed in `observability/metrics.py` rather than in SQL so
+    the gate arithmetic has one implementation and one set of tests. These are
+    per-turn rows over a bounded window, not a table scan of raw audio.
+    """
+    since = datetime.now(UTC) - timedelta(days=days)
+
+    def scoped(stmt: Any, joined: Any) -> Any:
+        stmt = stmt.join(Call, Call.id == joined).where(Call.started_at >= since)
+        return stmt.where(Call.client_id == client_id) if client_id else stmt
+
+    latencies = list(
+        await session.scalars(
+            scoped(
+                select(Turn.latency_ms).where(Turn.latency_ms.isnot(None)),
+                Turn.call_id,
+            )
+        )
+    )
+    # `cutoff_ms` is how long the flush/cancel/truncate sequence took;
+    # `discarded_ms` is audio handed to Twilio that the caller never heard, which
+    # is exactly the error between the model's belief and reality.
+    barge_ins = list(
+        await session.scalars(
+            scoped(
+                select(CallEvent.payload).where(CallEvent.kind == "barge_in"),
+                CallEvent.call_id,
+            )
+        )
+    )
+    tool_rows = [
+        (name, status, float(latency), attempt)
+        for name, status, latency, attempt in await session.execute(
+            scoped(
+                select(
+                    ToolInvocation.name,
+                    ToolInvocation.result_status,
+                    ToolInvocation.latency_ms,
+                    ToolInvocation.attempt,
+                ),
+                ToolInvocation.call_id,
+            )
+        )
+    ]
+
+    spend = select(
+        func.count().label("calls"),
+        func.coalesce(func.sum(Call.cost_cents), 0).label("cost_cents"),
+    ).where(Call.started_at >= since)
+    if client_id:
+        spend = spend.where(Call.client_id == client_id)
+    totals = (await session.execute(spend)).one()
+
+    report = metrics_mod.compute(
+        turn_latencies_ms=[float(v) for v in latencies],
+        barge_in_cutoffs_ms=_numbers(barge_ins, "cutoff_ms"),
+        truncation_errors_ms=_numbers(barge_ins, "discarded_ms"),
+        tool_rows=tool_rows,
+        calls=totals.calls or 0,
+        cost_cents=totals.cost_cents or 0,
+    )
+    return {"window_days": days, **report.to_json()}
+
+
+def _numbers(payloads: list[Any], key: str) -> list[float]:
+    """Pull one numeric key out of JSONB payloads, skipping anything unusable.
+
+    The payload is written by our own bridge, but it is still JSONB: an older row
+    from before a key existed reads as absent, and a non-numeric value must not
+    take the endpoint down.
+    """
+    values: list[float] = []
+    for payload in payloads:
+        raw = (payload or {}).get(key)
+        if isinstance(raw, bool) or not isinstance(raw, int | float):
+            continue
+        values.append(float(raw))
+    return values

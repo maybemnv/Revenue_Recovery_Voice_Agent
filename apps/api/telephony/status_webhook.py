@@ -59,9 +59,12 @@ async def call_status(request: Request) -> Response:
 
     if missed and from_e164:
         # `send_sms` performs the suppression lookup before the provider call.
+        # Keyed on the call SID: Twilio retries this callback on any non-2xx and
+        # on its own timeouts, and one missed call is one text.
         await send_sms(
             to=from_e164,
             client_id=client_id,
+            dedupe_key=f"missed_call:{call_sid}",
             body="We missed your call. Reply to this message and our team will call you back.",
         )
 
