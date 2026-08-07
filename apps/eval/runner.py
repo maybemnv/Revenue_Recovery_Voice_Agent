@@ -19,6 +19,7 @@ from apps.api.config.schema import ClientConfig, EscalationConfig, RealtimeConfi
 from apps.api.domain.escalation import should_escalate
 from apps.api.domain.state import CallState
 from apps.eval.graders import Grade, grade_trace
+from apps.eval.judge import Judgement, judge_trace, summarise
 
 SCENARIO_DIR = Path(__file__).with_name("scenarios")
 SAFETY_KEYWORDS = ("gas smell", "smell gas", "carbon monoxide", "smoke", "sparking")
@@ -114,30 +115,49 @@ def run_scenario(scenario: Scenario) -> Trace:
     )
 
 
-def run_all(scenarios: list[Scenario] | None = None) -> dict[str, Any]:
+def run_all(scenarios: list[Scenario] | None = None, *, judge: bool = False) -> dict[str, Any]:
+    """Grade every scenario. `judge` adds the advisory rubric on top.
+
+    The hard score is computed identically either way: the judge contributes a
+    separate `judge` block and never touches `score` or `critical_failures`. A
+    soft grader that can flip a hard verdict is worse than no soft grader.
+    """
     results: list[Grade] = []
+    judgements: list[Judgement] = []
     for scenario in scenarios or load_scenarios():
-        results.append(grade_trace(scenario, run_scenario(scenario)))
+        trace = run_scenario(scenario)
+        results.append(grade_trace(scenario, trace))
+        if judge:
+            judgements.append(judge_trace(scenario, trace))
     passed = sum(result.passed for result in results)
     critical_failures = [result.scenario_id for result in results if result.critical_failure]
-    return {
+    report: dict[str, Any] = {
         "total": len(results),
         "passed": passed,
         "score": round(passed / len(results), 4) if results else 0.0,
         "critical_failures": critical_failures,
         "results": [asdict(result) for result in results],
     }
+    if judge:
+        report["judge"] = summarise(judgements)
+        report["judgements"] = [asdict(j) for j in judgements]
+    return report
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(prog="eval-run")
     parser.add_argument("--scenario", default=None, help="Run one scenario id")
     parser.add_argument("--json", action="store_true", help="Print machine-readable output")
+    parser.add_argument(
+        "--judge",
+        action="store_true",
+        help="Add the advisory tone/completion rubric (needs ANTHROPIC_API_KEY; advisory only)",
+    )
     args = parser.parse_args()
     scenarios = load_scenarios()
     if args.scenario:
         scenarios = [scenario for scenario in scenarios if scenario.scenario_id == args.scenario]
-    report = run_all(scenarios)
+    report = run_all(scenarios, judge=args.judge)
     print(json.dumps(report, indent=None if args.json else 2, sort_keys=True))
     return 0 if report["score"] >= 0.85 and not report["critical_failures"] else 1
 
