@@ -82,6 +82,9 @@ class EscalationConfig(StrictModel):
     after_hours_target: str = "voicemail_with_page"
     max_consecutive_tool_failures: int = 3
     max_negative_sentiment_turns: int = 2
+    # Off makes `max_negative_sentiment_turns` unreachable: nothing else moves
+    # the counter. On costs one text-only classification per caller turn.
+    live_sentiment: bool = True
 
     @field_validator("target_number")
     @classmethod

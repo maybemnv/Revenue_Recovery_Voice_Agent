@@ -14,7 +14,7 @@ from typing import Any
 
 import structlog
 
-from apps.api.security.redaction import redact_pan, redact_phone
+from apps.api.security.redaction import redact_pan, redact_phone, redact_structure
 
 _call_context: ContextVar[dict[str, Any] | None] = ContextVar("call_context", default=None)
 
@@ -35,22 +35,27 @@ def get_call_context() -> dict[str, Any]:
     return dict(_call_context.get() or {})
 
 
-def _inject_call_context(
-    _logger: Any, _method: str, event_dict: dict[str, Any]
-) -> dict[str, Any]:
+def _inject_call_context(_logger: Any, _method: str, event_dict: dict[str, Any]) -> dict[str, Any]:
     for key, value in (_call_context.get() or {}).items():
         event_dict.setdefault(key, value)
     return event_dict
 
 
 def _redact(_logger: Any, _method: str, event_dict: dict[str, Any]) -> dict[str, Any]:
-    """Card-like digit runs never reach a log sink; phone numbers are masked."""
+    """Card-like digit runs never reach a log sink; phone numbers are masked.
+
+    Nested values are walked as well. A bound `payload=` or `arguments=` dict is
+    the likeliest way for caller text to reach a log line, and a top-level-only
+    pass would render it verbatim inside the JSON.
+    """
     for key, value in list(event_dict.items()):
         if isinstance(value, str):
             value = redact_pan(value)
             if key in _REDACT_PHONE_KEYS:
                 value = redact_phone(value)
             event_dict[key] = value
+        elif isinstance(value, dict | list):
+            event_dict[key] = redact_structure(value)
     return event_dict
 
 

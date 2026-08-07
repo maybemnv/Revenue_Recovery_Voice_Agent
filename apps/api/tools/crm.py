@@ -17,6 +17,7 @@ from typing import Any, Protocol, runtime_checkable
 import httpx
 
 from apps.api.observability.logging import get_logger
+from apps.api.resilience import BACKGROUND, RetryPolicy, request_with_retry
 from apps.api.security.redaction import mask_e164
 from apps.api.settings import get_settings
 
@@ -85,11 +86,15 @@ class HubSpotCRM:
         access_token: str | None = None,
         base_url: str | None = None,
         client: httpx.AsyncClient | None = None,
+        retry_policy: RetryPolicy = BACKGROUND,
     ) -> None:
         settings = get_settings()
         self._token = access_token if access_token is not None else settings.hubspot_access_token
         self._base = (base_url or settings.hubspot_api_base).rstrip("/")
         self._client = client
+        # Every caller today is the post-call worker, where seconds are free.
+        # A future in-call CRM lookup must pass `IN_CALL` instead.
+        self._retry = retry_policy
 
     @property
     def _headers(self) -> dict[str, str]:
@@ -97,10 +102,14 @@ class HubSpotCRM:
 
     async def _request(self, method: str, path: str, **kwargs: Any) -> httpx.Response:
         url = f"{self._base}{path}"
-        if self._client is not None:
-            return await self._client.request(method, url, headers=self._headers, **kwargs)
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            return await client.request(method, url, headers=self._headers, **kwargs)
+
+        async def send() -> httpx.Response:
+            if self._client is not None:
+                return await self._client.request(method, url, headers=self._headers, **kwargs)
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                return await client.request(method, url, headers=self._headers, **kwargs)
+
+        return await request_with_retry(send, label=f"hubspot {method} {path}", policy=self._retry)
 
     async def find_by_phone(self, phone_e164: str) -> CRMContact | None:
         response = await self._request(

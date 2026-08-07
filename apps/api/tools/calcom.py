@@ -18,6 +18,7 @@ from typing import Any
 import httpx
 
 from apps.api.observability.logging import get_logger
+from apps.api.resilience import IN_CALL, request_with_retry
 from apps.api.settings import get_settings
 
 log = get_logger(__name__)
@@ -83,10 +84,17 @@ class CalcomClient:
     ) -> httpx.Response:
         url = f"{self._base}{path}"
         headers = self._headers(api_version)
-        if self._client is not None:
-            return await self._client.request(method, url, headers=headers, **kwargs)
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            return await client.request(method, url, headers=headers, **kwargs)
+
+        async def send() -> httpx.Response:
+            if self._client is not None:
+                return await self._client.request(method, url, headers=headers, **kwargs)
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                return await client.request(method, url, headers=headers, **kwargs)
+
+        # `create_booking` is safe to retry because every booking carries an
+        # idempotency key and `find_booking_by_key` can recover a winner, so a
+        # retried write cannot double-book.
+        return await request_with_retry(send, label=f"calcom {method} {path}", policy=IN_CALL)
 
     # -- slots ------------------------------------------------------------
     async def search_slots(

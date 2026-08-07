@@ -9,6 +9,7 @@ from __future__ import annotations
 import httpx
 
 from apps.api.observability.logging import get_logger
+from apps.api.resilience import IN_CALL, RetryPolicy, request_with_retry
 from apps.api.settings import get_settings
 
 log = get_logger(__name__)
@@ -23,19 +24,31 @@ async def embed_text(text: str, *, client: httpx.AsyncClient | None = None) -> l
 
 
 async def embed_batch(
-    texts: list[str], *, client: httpx.AsyncClient | None = None
+    texts: list[str],
+    *,
+    client: httpx.AsyncClient | None = None,
+    policy: RetryPolicy = IN_CALL,
 ) -> list[list[float]]:
+    """Embed a batch. Retryable without qualification — it has no side effects.
+
+    The default is the in-call profile because the live knowledge lookup is the
+    latency-sensitive caller; the offline ingest passes `BACKGROUND`, where a
+    rate limit is worth actually waiting out.
+    """
     if not texts:
         return []
     settings = get_settings()
     payload: dict[str, object] = {"model": settings.openai_embedding_model, "input": texts}
     headers = {"Authorization": f"Bearer {settings.openai_api_key}"}
-    try:
+
+    async def send() -> httpx.Response:
         if client is not None:
-            response = await _post(client, payload, headers)
-        else:
-            async with httpx.AsyncClient() as owned:
-                response = await _post(owned, payload, headers)
+            return await _post(client, payload, headers)
+        async with httpx.AsyncClient() as owned:
+            return await _post(owned, payload, headers)
+
+    try:
+        response = await request_with_retry(send, label="openai embeddings", policy=policy)
     except httpx.HTTPError as exc:
         log.warning("embedding_request_failed", error=type(exc).__name__)
         return []
