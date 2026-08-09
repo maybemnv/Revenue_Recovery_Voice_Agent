@@ -375,8 +375,8 @@ Kill Cal.com mid-call. The agent promises a callback and creates the CRM task. T
 Beat 7. This is what the client looks at while you talk, and it is what makes the invisible work visible.
 
 - [x] **[D0]** Next.js 15 App Router scaffolded in `apps/web` with a checked-in `package.json` and lockfile
-- [ ] **[D0]** Tailwind + shadcn/ui; token-compatible styling exists, but shadcn component integration is still open
-- [x] **[D0]** Inter for text, JetBrains Mono for every number compared vertically
+- [ ] **[D0]** Tailwind + shadcn/ui; the working prototype now uses a shared tokenized CSS system, but shadcn component integration is still open
+- [x] **[D0]** Brand palette and responsive prototype UI implemented in `apps/web/app/tokens.css` + `globals.css`; Trebuchet MS/Segoe UI/Consolas pairing replaces the earlier Inter/JetBrains styling
 - [x] **[D0]** REST + SSE routers in `apps/api/routers/`
 - [x] **[D0]** Call list: outcome, duration, cost, latency columns
 - [x] **[D1]** Filter by outcome and date
