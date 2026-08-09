@@ -23,8 +23,8 @@ export default function CallDetailPage() {
   return (
     <div className="page">
       <div className="page-heading">
-        <div><Link className="eyebrow" href="/calls">Back to call ledger</Link><h1>{call.from_e164}</h1><p className="subhead">{call.client_id} / {call.outcome ?? "in progress"} / {formatDuration(call.duration_seconds)}</p></div>
-        {call.recording_url && <audio controls src={`/api/backend/calls/${call.id}/recording`}>Recording playback</audio>}
+        <div className="heading-copy"><Link className="eyebrow" href="/calls">← Back to call ledger</Link><h1>{call.from_e164}</h1><p className="subhead">{call.client_id} / {call.outcome ?? "in progress"} / {formatDuration(call.duration_seconds)}</p></div>
+        {call.recording_url && <div className="detail-actions"><audio controls src={`/api/backend/calls/${call.id}/recording`}>Recording playback</audio></div>}
       </div>
       <div className="detail-grid">
         <section className="panel" aria-labelledby="transcript-title">
@@ -44,7 +44,7 @@ export default function CallDetailPage() {
             {call.events.map((event, index) => <div className="timeline-item" key={`${event.at_ms}-${index}`}><div className="timeline-kind">{event.kind}</div><div className="timeline-detail">{event.at_ms} ms {JSON.stringify(event.payload)}</div></div>)}
             {call.events.length === 0 && <div className="empty">No events persisted.</div>}
           </div>
-          <div className="panel-heading" style={{ marginTop: 20 }}><h2>Tool calls</h2><span>{call.tool_invocations.length}</span></div>
+          <div className="panel-heading panel-spaced"><h2>Tool calls</h2><span>{call.tool_invocations.length}</span></div>
           {call.tool_invocations.map((tool, index) => <div className={`tool-chip ${tool.status === "ok" ? "" : "failed"}`} key={`${tool.name}-${index}`}>{tool.name} / {tool.status} / {tool.latency_ms} ms</div>)}
         </aside>
       </div>

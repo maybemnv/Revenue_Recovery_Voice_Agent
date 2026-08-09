@@ -20,18 +20,21 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       <body>
         <div className="app-shell">
           <header className="topbar">
-            <Link href="/calls" className="wordmark" aria-label="Northstar home">
-              <span className="wordmark-mark" aria-hidden="true">N</span>
-              <span>northstar</span>
-            </Link>
-            <nav aria-label="Primary navigation" className="primary-nav">
-              {links.map(([label, href]) => (
-                <Link key={href} href={href}>{label}</Link>
-              ))}
-            </nav>
-            <div className="system-state"><span className="status-dot" /> Media plane ready</div>
+            <div className="topbar-inner">
+              <Link href="/calls" className="wordmark" aria-label="Northstar home">
+                <span className="wordmark-mark" aria-hidden="true">N</span>
+                <span className="wordmark-copy"><strong>northstar</strong><small>revenue recovery</small></span>
+              </Link>
+              <nav aria-label="Primary navigation" className="primary-nav">
+                {links.map(([label, href], index) => (
+                  <Link key={href} href={href}><span className="nav-index">0{index + 1}</span>{label}</Link>
+                ))}
+              </nav>
+              <div className="system-state"><span className="status-dot" /><span className="system-state-copy"><strong>Ready</strong><span>media plane</span></span></div>
+            </div>
           </header>
           <main>{children}</main>
+          <footer className="footer"><strong>northstar / call operations</strong><span>Prototype surface · read-only controls · 2026</span></footer>
         </div>
       </body>
     </html>

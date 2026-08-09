@@ -1,0 +1,63 @@
+/* Hallmark · pre-emit critique: P5 H5 E4 S5 R5 V4
+ * macrostructure: Workbench · F3 tabular spec sheet + T4 stat strip · theme: custom · enrichment: none
+ * nav: N5 · footer: Ft2 · contrast: pass (40–41) · slop: pass (42–45) · honest: pass (46) · chrome: pass (47)
+ * tokens: pass (48) · responsive: pass (49) · mobile: pass (34, 49, 50–57)
+ */
+:root {
+  --brand-silver: #d9dada;
+  --brand-steel: #adaeb0;
+  --brand-blue: #c3d4e8;
+  --brand-gray: #c6c7c8;
+  --brand-soft: #f3f3f3;
+  --brand-slate: #3e4246;
+  --brand-ink: #121314;
+  --brand-white: #f7f7f7;
+
+  --color-canvas: var(--brand-soft);
+  --color-surface: var(--brand-white);
+  --color-surface-raised: var(--brand-silver);
+  --color-ink: var(--brand-ink);
+  --color-muted: var(--brand-slate);
+  --color-subtle: var(--brand-steel);
+  --color-border: var(--brand-gray);
+  --color-accent: var(--brand-blue);
+  --color-accent-ink: var(--brand-ink);
+  --color-primary: var(--color-accent);
+  --color-primary-strong: var(--brand-slate);
+  --color-panel: var(--brand-ink);
+  --color-panel-soft: var(--brand-slate);
+  --color-panel-text: var(--brand-white);
+  --color-grid: color-mix(in srgb, var(--brand-steel) 42%, transparent);
+  --color-focus: var(--brand-slate);
+  --color-success: var(--brand-slate);
+  --color-warning: var(--brand-steel);
+  --color-danger: var(--brand-ink);
+
+  --font-display: "Trebuchet MS", "Segoe UI", Arial, sans-serif;
+  --font-body: "Segoe UI", Arial, sans-serif;
+  --font-mono: Consolas, "Liberation Mono", monospace;
+
+  --space-3xs: 0.25rem;
+  --space-2xs: 0.5rem;
+  --space-xs: 0.75rem;
+  --space-sm: 1rem;
+  --space-md: 1.5rem;
+  --space-lg: 2rem;
+  --space-xl: 3rem;
+  --space-2xl: 4.5rem;
+
+  --text-xs: 0.6875rem;
+  --text-sm: 0.8125rem;
+  --text-md: 1rem;
+  --text-lg: 1.25rem;
+  --text-xl: 2rem;
+  --text-2xl: clamp(2.5rem, 7vw, 4.5rem);
+
+  --page-max: 90rem;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --dur-short: 160ms;
+  --dur-mid: 260ms;
+  --radius-card: 0.75rem;
+  --radius-pill: 999px;
+  --radius-input: 0.5rem;
+}

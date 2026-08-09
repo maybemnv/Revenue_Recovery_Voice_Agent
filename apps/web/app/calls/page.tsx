@@ -31,12 +31,12 @@ export default function CallsPage() {
   return (
     <div className="page">
       <div className="page-heading">
-        <div>
+        <div className="heading-copy">
           <div className="eyebrow">Operations / calls</div>
           <h1>Call ledger</h1>
           <p className="subhead">Every conversation, tool decision, and handoff in one reviewable surface.</p>
         </div>
-        <Link className="button" href="/live">Open live monitor</Link>
+        <div className="heading-meta"><Link className="button" href="/live">Open live monitor ↗</Link></div>
       </div>
       <div className="metric-strip" aria-label="Call metrics">
         <div className="metric"><div className="metric-label">Loaded calls</div><div className="metric-value">{calls.length}</div><div className="metric-note">Current result window</div></div>
@@ -69,12 +69,12 @@ export default function CallsPage() {
             <tbody>
               {calls.map((call) => (
                 <tr key={call.id}>
-                  <td><div className="cell-title">{call.from_e164}</div><div className="cell-meta">{call.client_id}</div></td>
-                  <td className="mono">{formatTime(call.started_at)}</td>
-                  <td className="mono">{formatDuration(call.duration_seconds)}</td>
-                  <td><span className={`status ${call.outcome ?? "failed"}`}>{call.outcome ?? "in progress"}</span></td>
-                  <td className="mono">${(call.cost_cents / 100).toFixed(2)}</td>
-                  <td><Link className="button quiet" href={`/calls/${call.id}`}>Review</Link></td>
+                  <td data-label="Caller"><div className="cell-title">{call.from_e164}</div><div className="cell-meta">{call.client_id}</div></td>
+                  <td className="mono" data-label="Started">{formatTime(call.started_at)}</td>
+                  <td className="mono" data-label="Duration">{formatDuration(call.duration_seconds)}</td>
+                  <td data-label="Outcome"><span className={`status ${call.outcome ?? "failed"}`}>{call.outcome ?? "in progress"}</span></td>
+                  <td className="mono" data-label="Cost">${(call.cost_cents / 100).toFixed(2)}</td>
+                  <td data-label=""><Link className="button quiet" href={`/calls/${call.id}`}>Review</Link></td>
                 </tr>
               ))}
             </tbody>
