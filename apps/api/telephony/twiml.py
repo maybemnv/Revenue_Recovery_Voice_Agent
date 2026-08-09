@@ -18,7 +18,7 @@ from hashlib import sha1
 from urllib.parse import urlencode
 from xml.sax.saxutils import escape, quoteattr
 
-from fastapi import APIRouter, Request, Response
+from fastapi import APIRouter, BackgroundTasks, Request, Response
 
 from apps.api.config.loader import ClientConfigNotFound, get_registry
 from apps.api.db import repository
@@ -26,6 +26,7 @@ from apps.api.db.session import session_scope
 from apps.api.observability.logging import get_logger
 from apps.api.security.redaction import mask_e164
 from apps.api.settings import get_settings
+from apps.api.telephony.recording import start_call_recording
 
 log = get_logger(__name__)
 
@@ -119,7 +120,7 @@ def media_url(
 
 @router.post("/twiml/incoming")
 @router.post("/telephony/voice")
-async def inbound_voice(request: Request) -> Response:
+async def inbound_voice(request: Request, background_tasks: BackgroundTasks) -> Response:
     """Twilio hits this on every inbound call. It must answer in well under a second."""
     form = {k: str(v) for k, v in (await request.form()).items()}
 
@@ -149,6 +150,10 @@ async def inbound_voice(request: Request) -> Response:
             from_e164=from_number,
             consent_captured=True,
         )
+    if call_sid and get_settings().twilio_recording_enabled:
+        # Twilio runs this after the webhook response. The response itself
+        # contains the consent preamble before the media stream connects.
+        background_tasks.add_task(start_call_recording, call_sid)
     twiml = build_connect_twiml(
         ws_url=media_url(
             call_id=call_id,

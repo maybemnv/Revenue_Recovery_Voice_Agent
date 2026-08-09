@@ -78,6 +78,11 @@ async def recording_status(request: Request) -> Response:
         return Response(status_code=403, content="invalid signature")
 
     call_sid = form.get("CallSid", "")
+    recording_status = form.get("RecordingStatus", "completed")
+    if recording_status != "completed":
+        # Do not expose an in-progress or absent URL as playable dashboard
+        # state. Twilio sends the completed callback when media is available.
+        return Response(content=EMPTY_TWIML, media_type="application/xml")
     url = form.get("RecordingUrl", "")
     if not url:
         return Response(content=EMPTY_TWIML, media_type="application/xml")

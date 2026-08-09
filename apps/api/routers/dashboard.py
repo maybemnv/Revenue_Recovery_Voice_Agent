@@ -12,7 +12,9 @@ import uuid
 from datetime import UTC, date, datetime, time, timedelta
 from typing import Annotated, Any
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import Response
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -22,6 +24,7 @@ from apps.api.db.session import get_session
 from apps.api.observability import metrics as metrics_mod
 from apps.api.routers.auth import require_viewer
 from apps.api.security.redaction import mask_e164
+from apps.api.settings import get_settings
 
 router = APIRouter(prefix="/api", tags=["dashboard"], dependencies=[Depends(require_viewer)])
 
@@ -166,6 +169,38 @@ async def get_call_detail(call_id: uuid.UUID, session: SessionDep) -> dict[str, 
             else None
         ),
     }
+
+
+@router.get("/calls/{call_id}/recording")
+async def get_call_recording(call_id: uuid.UUID, session: SessionDep) -> Response:
+    """Proxy consent-approved Twilio media without exposing provider credentials."""
+    call = await session.get(Call, call_id)
+    if call is None or not call.consent_captured or not call.recording_url:
+        raise HTTPException(status_code=404, detail="recording not available")
+
+    media_url = call.recording_url.rstrip("/")
+    if not media_url.endswith((".mp3", ".wav")):
+        media_url += ".mp3"
+    settings = get_settings()
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            upstream = await client.get(
+                media_url,
+                auth=(settings.twilio_account_sid, settings.twilio_auth_token),
+            )
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=502, detail="recording provider unavailable") from exc
+    if upstream.status_code == 404:
+        raise HTTPException(status_code=404, detail="recording not available")
+    if upstream.status_code >= 400:
+        raise HTTPException(status_code=502, detail="recording provider rejected the request")
+
+    media_type = upstream.headers.get("content-type", "audio/mpeg").split(";", 1)[0]
+    return Response(
+        content=upstream.content,
+        media_type=media_type,
+        headers={"Cache-Control": "private, no-store"},
+    )
 
 
 @router.get("/metrics")

@@ -29,7 +29,9 @@ export type CallDetail = CallSummary & {
   }>;
 };
 
-const base = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
+// Calls stay same-origin so the Next.js server proxy can attach the viewer
+// token without exposing it to browser JavaScript or putting it in a URL.
+const base = "/api/backend";
 
 export async function api<T>(path: string): Promise<T> {
   const response = await fetch(`${base}${path}`, { cache: "no-store" });

@@ -37,7 +37,11 @@ async def _event_stream(request: Request, call_id: str | None) -> AsyncIterator[
                 continue
             if call_id and event.call_id != call_id:
                 continue
-            yield f"event: {event.kind}\ndata: {json.dumps(event.to_json())}\n\n"
+            # Keep the event on SSE's default `message` channel. The dashboard
+            # uses EventSource.onmessage and receives the dynamic event kind in
+            # the JSON payload, so new bridge events do not require a frontend
+            # listener deployment before they become visible.
+            yield f"data: {json.dumps(event.to_json())}\n\n"
 
 
 @router.get("/stream")

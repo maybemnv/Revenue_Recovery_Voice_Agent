@@ -24,7 +24,7 @@ export default function CallDetailPage() {
     <div className="page">
       <div className="page-heading">
         <div><Link className="eyebrow" href="/calls">Back to call ledger</Link><h1>{call.from_e164}</h1><p className="subhead">{call.client_id} / {call.outcome ?? "in progress"} / {formatDuration(call.duration_seconds)}</p></div>
-        {call.recording_url && <audio controls src={call.recording_url}>Recording playback</audio>}
+        {call.recording_url && <audio controls src={`/api/backend/calls/${call.id}/recording`}>Recording playback</audio>}
       </div>
       <div className="detail-grid">
         <section className="panel" aria-labelledby="transcript-title">

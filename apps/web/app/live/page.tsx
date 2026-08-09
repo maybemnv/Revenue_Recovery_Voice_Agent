@@ -10,8 +10,7 @@ export default function LivePage() {
   const [connected, setConnected] = useState(false);
 
   useEffect(() => {
-    const base = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
-    const source = new EventSource(`${base}/api/stream`);
+    const source = new EventSource("/api/backend/stream");
     source.onopen = () => setConnected(true);
     source.onmessage = (message) => {
       try { setEvents((current) => [JSON.parse(message.data) as LiveEvent, ...current].slice(0, 12)); } catch { /* ignore malformed provider events */ }
