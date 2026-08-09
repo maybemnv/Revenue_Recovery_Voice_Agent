@@ -30,7 +30,7 @@ Every item states its **file**, its **done-when**, and where useful the **comman
 
 ## Ground Truth: what actually exists today
 
-Updated against `28da055` after the ordered Track 0-6 commits. The original
+Updated on 2026-08-09 against `be5f9b7` after the ordered Track 0-7 commits. The original
 baseline description below has been replaced with the current implementation
 state; external-provider and live-phone checks remain deliberately separate.
 
@@ -53,9 +53,25 @@ the following verified implementation surfaces:
 - Seven SQLAlchemy tables, pgvector and table/index migrations, repository helpers, and FastAPI health/readiness wiring.
 - TwiML inbound routing, UUID call creation, `/media/{call_id}`, GA Realtime session construction, passthrough bridge, playback ledger, barge-in ordering, and budget guard.
 - Six per-call tools, typed failure envelopes, latency masking, Cal.com/HubSpot/Twilio/Stripe adapter boundaries, KB ingestion, and pure domain functions.
-- Deterministic escalation, missed-call SMS, STOP suppression, consent gating, PAN redaction, Celery workers, REST/SSE routers, and bearer-token dashboard auth.
+- Deterministic escalation, missed-call SMS, STOP suppression, consent gating, PAN redaction, Celery workers, REST/SSE routers, and API bearer-token dashboard auth.
 - Next.js dashboard routes for calls, detail replay, live SSE, agent configuration, and analytics empty states.
-- Forty YAML eval scenarios, hard graders, a committed baseline, and 110 unit tests.
+- Forty YAML eval scenarios, hard graders, a committed baseline, and 309 unit tests.
+
+### Current release readout — 2026-08-09
+
+The local code and offline-eval gate is green: scoped Ruff (`apps` and
+`tests`), mypy, all 309 tests, the 40-scenario eval, `uv lock --check`, the
+web production build, and `uv run alembic heads` all pass. This is not yet a
+live demo release: the checkout has no `.env`, Docker Desktop has no running
+Linux engine, and no clean database, `/health/ready`, provider call,
+browser-width check, or live latency measurement has been verified.
+
+The remaining demo path is: provision secrets and a stable public URL; start
+Postgres/Redis and run the clean migration; verify the dashboard proxy with
+the configured viewer token; load the Northside KB; prove a real Twilio/OpenAI call with booking, SMS, degraded
+Cal.com behavior, safety transfer, transcript persistence, and the barge-in /
+latency gates; then complete the browser walkthrough and rehearsal runbook.
+Production-only work remains separately tagged **[P]**.
 
 ### Known-broken, fix in Track 0
 
@@ -110,12 +126,12 @@ Nothing else can start until the app boots, the DB has tables, and tests can run
 
 - [x] **[D0]** `mkdir tests/` with `conftest.py`; `uv run pytest` exits 0 on an empty suite instead of erroring on a missing `testpaths`
 - [x] **[D0]** Resolve the two broken `[project.scripts]` entry points (see Known-broken above)
-- [x] **[D0]** `.env` created from `.env.example` with real values; confirm `.gitignore` covers it
+- [ ] **[D0]** `.env` created locally from `.env.example` with real values; the current checkout has no `.env` (it remains correctly ignored)
 - [x] **[D0]** `uv sync` succeeds and `uv run python -c "from apps.api.settings import get_settings; print(get_settings().environment)"` prints `local`
 - [ ] **[D1]** `Dockerfile` for the API; `docker compose up` brings api + postgres + redis — Dockerfile exists; service startup is not yet verified in this environment
 - [x] **[D1]** `docker-compose.yml` expanded to api, worker, web, postgres (pgvector image), redis
-- [x] **[D1]** `README.md` written — it is 0 bytes today and it is the first thing anyone opening the repo reads
-- [x] **[D1]** `uv run ruff check .` and `uv run mypy apps` both clean; wire into a pre-commit hook
+- [x] **[D1]** `README.md` written with local setup, deployment, verification, and demo flow
+- [x] **[D1]** Scoped `uv run ruff check apps tests` and `uv run mypy apps` are clean; the root Ruff command is currently contaminated by the local `.git/split-backup/sel.py` artifact, while clean-checkout CI uses the repository command
 - [x] **[P]** GitHub Actions: ruff + mypy + pytest + docker build on every push — `.github/workflows/ci.yml`, five parallel jobs: `ruff check` + `mypy`, `pytest`, the offline eval gate, the API image build, and `next build` for the dashboard. No services and no secrets: `conftest.py` sets placeholder env before the first app import and every provider is faked at its seam, so the suite needs neither Postgres nor a key. The eval job deliberately omits `--judge` so CI never depends on a provider being up. Added `.dockerignore` while wiring the image job — without it `COPY apps ./apps` shipped `apps/web/node_modules` into a Python image. The build job itself is unverified locally: no Docker daemon in this environment, so only the `COPY` sources were checked
   - `ruff format --check` is **not** gated: 19 files predating the workflow would reformat, and a job that is red on arrival teaches everyone to ignore it. Reformat in its own commit, then add the gate
 
@@ -165,7 +181,7 @@ This is the project. Beat 3 of the demo lives entirely here.
 - [x] **[D0]** `turn_detection: {type: "semantic_vad", interrupt_response: true}` sourced from client YAML
 - [x] **[D0]** Stored prompt by `prompt_id` + pinned `prompt_version` + `variables`; `schema.py` already validates that one of `prompt_id`/`instructions` is present
 - [x] **[D0]** Handle GA event names: `response.output_audio.delta`, `input_audio_buffer.speech_started`, `input_audio_buffer.speech_stopped`, `response.cancelled`
-- [ ] **[D0]** Integration test asserts `session.update` → `session.updated` round-trips with `audio/pcmu` both directions
+- [x] **[D0]** Integration test asserts `session.update` → `session.updated` round-trips with `audio/pcmu` both directions (`tests/unit/test_realtime_session.py`)
 
 ### The relay
 
@@ -358,7 +374,7 @@ Kill Cal.com mid-call. The agent promises a callback and creates the CRM task. T
 
 Beat 7. This is what the client looks at while you talk, and it is what makes the invisible work visible.
 
-- [x] **[D0]** Next.js 15 App Router scaffolded in `apps/web` — there is no `package.json` today
+- [x] **[D0]** Next.js 15 App Router scaffolded in `apps/web` with a checked-in `package.json` and lockfile
 - [ ] **[D0]** Tailwind + shadcn/ui; token-compatible styling exists, but shadcn component integration is still open
 - [x] **[D0]** Inter for text, JetBrains Mono for every number compared vertically
 - [x] **[D0]** REST + SSE routers in `apps/api/routers/`
@@ -366,7 +382,7 @@ Beat 7. This is what the client looks at while you talk, and it is what makes th
 - [x] **[D1]** Filter by outcome and date
 - [x] **[D0]** Call detail: transcript with **inline tool chips**, **barge-in markers**, per-turn latency
 - [x] **[D1]** Latency over 1,400 ms renders in `--degraded`
-- [x] **[D1]** Recording playback
+- [ ] **[D1]** Recording playback end to end — opt-in recording start, completed-callback handling, consent gating, and an authenticated media proxy now exist; real callback/playback verification remains
 - [x] **[D1]** Escalation timeline from `call_events`, chronological
 - [ ] **[D1]** Live view over SSE: waveform, streaming transcript, active tool indicator, < 500 ms lag — implementation exists; lag is not measured
 - [ ] **[P]** Analytics: calls by hour, outcome distribution, recovered-revenue estimate, p50/p95 trend
@@ -374,7 +390,7 @@ Beat 7. This is what the client looks at while you talk, and it is what makes th
 - [ ] **[P]** Config reload requires no media-plane redeploy — hot-reload is **already built**, just prove it
 - [ ] **[D1]** Mobile call detail verified at 390 px — responsive layout exists; browser verification remains
 - [ ] **[D0]** Desktop verified at 1280 px — **this is the width you will demo at**; browser verification remains
-- [x] **[D0]** Dashboard auth — even a shared bearer token; `DASHBOARD_API_TOKEN` is already in settings
+- [ ] **[D0]** Dashboard auth end to end — the Next.js same-origin proxy now attaches the server-side viewer token for REST, SSE, and recording playback; prove the configured deployment in a browser
 - [x] **[P]** Admin/viewer role split
 
 ---
@@ -470,35 +486,37 @@ Say these out loud during the demo as roadmap, not as gaps. Naming them first is
 
 ### Implementation Evidence
 
-- Ordered commits: `bb41c03`, `38fa9e3`, `07e38db`, `87f802c`, `5093be2`, `94d83a1`, `b290a6d`, `28da055`, `1256aca`, `70b76bb`, `5dfb160`, `39d59a6`, `b3fc72b`, `5845605`, `6091097`, `50b08e6`.
-- `uv run ruff check .` passed.
-- `uv run mypy apps` currently fails with two type errors in `apps/api/resilience.py:161` and `apps/api/resilience.py:198`.
-- `uv run pytest` passed with 129 tests.
+- Ordered commits: `bb41c03`, `38fa9e3`, `07e38db`, `87f802c`, `5093be2`, `94d83a1`, `b290a6d`, `28da055`, `1256aca`, `70b76bb`, `5dfb160`, `39d59a6`, `b3fc72b`, `5845605`, `6091097`, `50b08e6`, `743128b`, `2430040`, `0cbbb44`, `be5f9b7`.
+- `uv run ruff check apps tests` passed; `uv run ruff check .` is blocked only by the local `.git/split-backup/sel.py` artifact, not project source.
+- `uv run mypy apps` passed with no issues across 65 source files.
+- `uv run pytest` passed with 309 tests.
 - `uv run eval-run --json` passed 40/40 scenarios with zero critical failures.
-- `npm run build` passed for `apps/web` on Next.js 15.5.22.
-- `uv lock --check` and the `docker build` CI job still need verification.
-- `uv run alembic heads` should report `0003_sms_sends`; clean-DB upgrade still needs a running Postgres/pgvector service.
-- Not yet verified: real Twilio/OpenAI/Cal.com/HubSpot calls, live latency gates, `docker compose up`, the `docker build` CI job (no daemon in this environment — only the `COPY` sources were checked), live `/health`, clean-DB migration execution, browser-width checks, and provider credentials.
+- `npm --prefix apps/web run build` passed on Next.js 15.5.22.
+- `uv lock --check` passed; the Docker image/Compose checks remain unverified because Docker Desktop's Linux engine is not running.
+- `uv run alembic heads` reports `0003_sms_sends`; clean-DB upgrade still needs a running Postgres/pgvector service.
+- Not yet verified: real Twilio/OpenAI/Cal.com/HubSpot calls, live latency gates, `docker compose up`, the Docker build CI job, live `/health/ready`, clean-DB migration execution, browser-width checks, dashboard browser auth, recording callback/playback, Northside KB ingestion, and provider credentials.
 
 Counts below are mechanical: every top-level `- [ ]` / `- [x]` line inside each
 Track heading. There are no nested checkboxes, so these are exact.
 
-| Track               | Items | Implemented | Gate                        |
-| ------------------- | ----- | ----------- | --------------------------- |
-| 0 — Foundation      | 28    | 15          | App boots, migrations run   |
-| 1 — Media plane     | 59    | 46          | **Live call + barge-in**    |
-| 2 — Tools & booking | 28    | 26          | **Real appointment booked** |
-| 3 — Resilience      | 24    | 21          | **Degraded path + safety**  |
-| 4 — Post-call       | 12    | 7           | Artifacts ≤ 90 s            |
-| 5 — Dashboard       | 18    | 11          | Walkthrough at 1280 px      |
-| 6 — Evals           | 9     | 9           | ≥ 85%, zero safety failures |
-| 7 — Observability   | 6     | 3           | Health + metrics            |
-| **Total**           | 184   | 138         |                             |
+| Track               | Items | Implemented | Open | Gate                        |
+| ------------------- | ----- | ----------- | ---- | --------------------------- |
+| 0 — Foundation      | 28    | 14          | 14   | App boots, migrations run   |
+| 1 — Media plane     | 59    | 47          | 12   | **Live call + barge-in**    |
+| 2 — Tools & booking | 28    | 26          | 2    | **Real appointment booked** |
+| 3 — Resilience      | 24    | 21          | 3    | **Degraded path + safety**  |
+| 4 — Post-call       | 12    | 7           | 5    | Artifacts ≤ 90 s            |
+| 5 — Dashboard       | 18    | 9           | 9    | Walkthrough at 1280 px      |
+| 6 — Evals           | 9     | 9           | 0    | ≥ 85%, zero safety failures |
+| 7 — Observability   | 6     | 3           | 3    | Health + metrics            |
+| **Total**           | 184   | 136         | 48   |                             |
 
-Every remaining open item is one of three kinds: it needs a real provider
-credential or a live call (most of Track 0 and the Track 1 gate), it needs a
-running Postgres/Redis/Docker daemon, or it is a **[P]** production concern
-deliberately deferred (Sentry, Langfuse, alerting, the analytics page).
+Every remaining implementation-track item is one of three kinds: it needs a
+real provider credential or a live call (most of Track 0 and the Track 1 gate),
+it needs a running Postgres/Redis/Docker daemon or browser, or it is a **[P]**
+production concern deliberately deferred (Sentry, Langfuse, alerting, the
+analytics page). The separate Demo Day Runbook still has 22 unchecked
+operational items.
 
 **Demo-ready** = Tracks 0–3 complete at **[D0]**, plus Track 5 call list and call detail.
 **Production-ready** = everything, including **[P]**.

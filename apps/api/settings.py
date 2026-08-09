@@ -41,6 +41,7 @@ class Settings(BaseSettings):
     twilio_auth_token: str = ""
     twilio_messaging_from: str = ""
     twilio_validate_signatures: bool = True
+    twilio_recording_enabled: bool = False
 
     # cal.com
     calcom_api_key: str = ""

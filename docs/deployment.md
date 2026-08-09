@@ -13,33 +13,97 @@ managed services for staging and production.
 
 ## Current release gate
 
-Do not call this production-ready until all of the following are true:
+The repository is currently code-green but not live-demo-ready. The latest
+local evidence is recorded in [`task.md`](../task.md): 306 Python tests,
+40/40 offline eval scenarios with zero critical failures, mypy, scoped Ruff,
+the dashboard production build, lockfile validation, and the migration-head
+check all pass. No provider call, clean database upgrade, `/health/ready`,
+browser-width check, or live latency gate has been verified yet.
 
-- The demo-blocking items in [`tasks.md`](tasks.md) are complete and their
-  evidence is recorded.
-- The clean database migration, `/health/ready`, worker, API, and dashboard
-  have been verified in the target environment.
+Use this document in order. Do not skip ahead to a live phone call until the
+local stack and the smoke checks are green.
+
+Demo sign-off requires all of the following:
+
+- The D0 items in [`task.md`](../task.md) are complete and their evidence is
+  recorded.
+- A clean database migration, `/health/ready`, API, worker, and dashboard have
+  been verified in the target environment.
 - A real Twilio call completes the greeting, interruption, booking/degraded
-  path, and safety-transfer beats in `docs/DEMO_SCRIPT.md`.
-- Dashboard authentication works end to end. The current web client does not
-  send the backend bearer token yet; this is tracked as a code-level blocker.
-- Recording behavior, retention, and consent rules have been approved for the
+  path, and safety-transfer beats in [`DEMO_SCRIPT.md`](DEMO_SCRIPT.md).
+- Dashboard viewer authentication works in the browser; the admin token is
+  used only for configuration writes.
+- Recording behavior, retention, and consent rules are approved for the
   jurisdictions where the service will be used.
 
-The historical evidence in `task.md` says static checks and the local eval
-baseline passed, but real providers, clean-DB execution, Docker Compose,
-browser checks, live latency, and provider credentials were not verified at
-that snapshot. The current working tree has 121 passing Python tests and
-passing mypy, but Ruff currently reports five findings in
-`tests/unit/test_media_lifecycle.py`; deployment sign-off is therefore still
-blocked. Re-run the checks after the current working-tree changes.
+Production readiness additionally requires the items tagged **[P]**, including
+retention, backups, reconnect handling, alerting, and trace instrumentation.
+
+## Fast path from this checkout
+
+Run these steps from the repository root. They are deliberately split into a
+Compose path and a host-process path because container DNS and host DNS use
+different database/Redis URLs.
+
+1. Create `.env` and fill every required value. Keep it untracked:
+
+   ```powershell
+   Copy-Item .env.example .env
+   notepad .env
+   ```
+
+2. If the API and worker run in Docker Compose, use these service names in
+   `.env`:
+
+   ```dotenv
+   DATABASE_URL=postgresql+asyncpg://voice:voice@postgres:5432/voice
+   DATABASE_URL_SYNC=postgresql+psycopg://voice:voice@postgres:5432/voice
+   REDIS_URL=redis://redis:6379/0
+   CELERY_BROKER_URL=redis://redis:6379/1
+   CELERY_RESULT_BACKEND=redis://redis:6379/2
+   ```
+
+   If the API is started directly on Windows while only Postgres and Redis
+   run in Docker, use `localhost` instead. Do not mix the two forms.
+
+3. Start Docker Desktop's Linux engine, then validate and start the stack:
+
+   ```powershell
+   docker info
+   docker compose config
+   docker compose up --build -d
+   docker compose ps
+   ```
+
+4. Run the migration from the API container and verify both health endpoints:
+
+   ```powershell
+   docker compose exec api uv run alembic upgrade head
+   Invoke-RestMethod http://localhost:8000/health/live
+   Invoke-RestMethod http://localhost:8000/health/ready
+   ```
+
+   Readiness must report API, Postgres, and Redis as healthy. If it fails,
+   inspect `docker compose logs api worker postgres redis` before touching the
+   provider setup.
+
+5. Open `http://localhost:3000`, authenticate as a viewer, and confirm the
+   calls, live, and detail routes can reach the API. Use the admin token only
+   when testing a configuration write.
+
+6. Run the provider preflight in this order: OpenAI Realtime session, Twilio
+   inbound webhook and media stream, Cal.com availability/booking, HubSpot
+   contact/task sync, then Anthropic post-call analysis. The smoke call is the
+   final check, not the first one.
 
 ## Environment variables and secrets
 
 Create one environment set per environment. Never put real values in Git,
 client YAML, Docker images, browser source, screenshots, or chat transcripts.
 The API reads `.env` at the repository root; the API and worker use the same
-settings. The web value is supplied at Next.js build time.
+settings. The dashboard calls a same-origin Next.js server proxy, which reads
+`API_BASE_URL` and `DASHBOARD_VIEWER_TOKEN` on the server. Never prefix either
+value with `NEXT_PUBLIC_`: dashboard tokens must not enter browser JavaScript.
 
 | Variable | Required | Kind | Production/demo value or rule |
 |---|---:|---|---|
@@ -60,6 +124,7 @@ settings. The web value is supplied at Next.js build time.
 | `TWILIO_AUTH_TOKEN` | yes | secret | Store only in the deployment secret manager; rotate if exposed |
 | `TWILIO_MESSAGING_FROM` | yes for SMS | provider identifier | E.164 Twilio number or approved messaging sender |
 | `TWILIO_VALIDATE_SIGNATURES` | yes | security config | `true` in staging/production; `false` only for isolated local tunnel work |
+| `TWILIO_RECORDING_ENABLED` | demo opt-in | security/config | `false` by default; set `true` only after the consent and jurisdiction review |
 | `CALCOM_API_KEY` | demo D0 | secret | Key with availability, reservation, and booking access for the selected calendar |
 | `CALCOM_API_BASE` | yes | endpoint | Current default is `https://api.cal.com/v2`; verify the account's API version |
 | `CALCOM_EVENT_TYPE_ID` | demo D0 | config | Numeric event type ID with open slots, correct duration, timezone, and team calendar |
@@ -73,9 +138,10 @@ settings. The web value is supplied at Next.js build time.
 | `LANGFUSE_HOST` | production/P | endpoint | Approved Langfuse host; setting this alone does not create traces until the code task is complete |
 | `CORS_ALLOW_ORIGINS` | yes | security config | Comma-separated exact HTTPS dashboard origins; no wildcard in production |
 | `DASHBOARD_API_TOKEN` | yes for admin | secret | Long random admin bearer token; required for config writes and admin API access |
-| `DASHBOARD_VIEWER_TOKEN` | yes for viewer | secret | Separate long random read-only bearer token |
-| `NEXT_PUBLIC_API_BASE_URL` | yes for web | build config | Public API origin used by the Next.js browser bundle; rebuild the web image when it changes |
-| `API_TOKEN` | no / stale | unused example value | Present in `.env.example` but not read by the current web code. Do not rely on it; remove or wire it through the code task before production |
+| `DASHBOARD_VIEWER_TOKEN` | yes for viewer | secret | Separate long random read-only bearer token; passed only to the Next.js server proxy |
+| `API_BASE_URL` | yes for web server | internal endpoint | `http://api:8000` in Compose; `http://localhost:8000` when Next runs on the host |
+| `NEXT_PUBLIC_API_BASE_URL` | optional fallback | public config | Kept only as a proxy fallback for local compatibility; it is not used for browser API calls |
+| `API_TOKEN` | no / stale | unused example value | Not read by the current code. Do not rely on it; remove it from deployment secrets |
 | `CLIENT_CONFIG_DIR` | optional | config | Optional settings override; defaults to `config/clients` and is not listed in `.env.example` |
 
 ### Secret preflight
@@ -91,6 +157,10 @@ settings. The web value is supplied at Next.js build time.
   access, HubSpot private-app scopes, and Langfuse/Sentry project access.
 - [ ] Confirm the secret manager does not print values in deployment logs and
   that crash/error reporting scrubs authorization headers and DSNs.
+- [ ] Keep `TWILIO_RECORDING_ENABLED=false` until the approved consent notice,
+  retention period, and jurisdiction decision are documented. Enabling it makes
+  the API start a dual-track Twilio recording after the inbound webhook and
+  persist only the completed callback URL.
 - [ ] Confirm `.gitignore` excludes `.env` and `.env.*` while retaining only
   `.env.example`.
 - [ ] Record the owner and rotation date for every provider credential in the
@@ -143,8 +213,9 @@ Complete the sequence in this order:
   verify the `vector` extension plus the seven application tables.
 - [ ] Start the worker and verify it can consume a test task without leaving a
   retry storm or an unreviewed failure.
-- [ ] Build the web image with `NEXT_PUBLIC_API_BASE_URL` set to the deployed
-  API origin. Do not put server secrets in any `NEXT_PUBLIC_*` variable.
+- [ ] Build the web image with `API_BASE_URL` set to the private deployed API
+  origin and `DASHBOARD_VIEWER_TOKEN` injected only into the web server. Do not
+  put server secrets in any `NEXT_PUBLIC_*` variable.
 - [ ] Set `CORS_ALLOW_ORIGINS` to the deployed dashboard origin and verify
   `/health/live`, `/health/ready`, dashboard API access, and SSE from the real
   browser origin.
@@ -165,10 +236,15 @@ healthy:
 | Generated bidirectional media stream | `wss://.../media/{call_id}` from the returned TwiML |
 | Warm-transfer whisper URL | `{PUBLIC_BASE_URL}/telephony/whisper` generated by the API |
 
-- [ ] Configure the number's status and recording callbacks according to the
-  approved recording design; the route exists, but current inbound TwiML does
-  not itself request a recording. Track the implementation change in
-  [`tasks.md`](tasks.md).
+- [ ] Configure the number's status callback and, if recording is enabled, the
+  recording callback at `/telephony/recording`. The application starts the
+  recording through Twilio's live-call API only when
+  `TWILIO_RECORDING_ENABLED=true`; it stores only a completed callback URL and
+  serves playback through the authenticated dashboard API.
+- [ ] If recording is enabled, verify the consent preamble is heard before the
+  recording starts, the callback arrives as `completed`, and the viewer can
+  play the audio from the call detail page. Keep it disabled until the legal
+  review is complete.
 - [ ] Send a signed callback from the real Twilio account and confirm invalid
   signatures receive `403` while valid callbacks are accepted.
 - [ ] Confirm the Twilio number has voice and messaging capability, sufficient
