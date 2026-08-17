@@ -14,6 +14,7 @@ os.environ.setdefault("TWILIO_ACCOUNT_SID", "ACtest")
 os.environ.setdefault("TWILIO_AUTH_TOKEN", "test-token")
 os.environ.setdefault("TWILIO_MESSAGING_FROM", "+13125550100")
 os.environ.setdefault("CALCOM_EVENT_TYPE_ID", "12345")
+os.environ["PUBLIC_BASE_URL"] = "http://localhost:8000"
 
 from apps.api.config.schema import ClientConfig
 

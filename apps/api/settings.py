@@ -63,7 +63,7 @@ class Settings(BaseSettings):
     langfuse_host: str = ""
 
     # dashboard
-    cors_allow_origins: list[str] = Field(default_factory=lambda: ["http://localhost:3000"])
+    cors_allow_origins: list[str] | str = Field(default_factory=lambda: ["http://localhost:3000"])
     dashboard_api_token: str = ""
     dashboard_viewer_token: str = ""
 
