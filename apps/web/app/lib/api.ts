@@ -8,6 +8,8 @@ export type CallSummary = {
   outcome: string | null;
   cost_cents: number;
   has_recording: boolean;
+  fixture: boolean;
+  simulated: boolean;
 };
 
 export type CallDetail = CallSummary & {
@@ -27,6 +29,16 @@ export type CallDetail = CallSummary & {
     attempt: number;
     arguments: Record<string, unknown>;
   }>;
+};
+
+export type DashboardMetrics = {
+  total_calls: number;
+  booked: number;
+  escalated: number;
+  booking_rate: number;
+  cost_usd: number;
+  avg_duration_seconds: number | null;
+  p50_response_latency_ms: number | null;
 };
 
 // Calls stay same-origin so the Next.js server proxy can attach the viewer
