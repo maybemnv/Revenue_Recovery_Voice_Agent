@@ -17,6 +17,7 @@ SessionDep = Annotated[AsyncSession, Depends(get_session)]
 
 @router.post("/reset-and-replay")
 async def reset_and_replay(session: SessionDep) -> dict[str, Any]:
-    if not get_settings().fixture_mode:
+    settings = get_settings()
+    if not settings.fixture_mode:
         raise HTTPException(status_code=404, detail="fixture replay is disabled")
-    return await get_demo_service(session).reset_and_replay()
+    return await get_demo_service(session, client_id=settings.fixture_client_id).reset_and_replay()

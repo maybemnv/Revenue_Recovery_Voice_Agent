@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -19,7 +20,11 @@ from apps.api.security.redaction import mask_e164
 FIXTURE_CLIENT_ID = "northside-hvac"
 FIXTURE_CALL_ID = uuid.UUID("00000000-0000-0000-0000-000000000101")
 FIXTURE_CALL_SID = "DEMO_FIXTURE_NORTHSIDE_HVAC_001"
-FIXTURE_CLOCK = datetime(2026, 8, 19, 15, 0, tzinfo=UTC)
+
+
+def utc_now() -> datetime:
+    """Return the replay clock in UTC so the default seven-day dashboard window sees it."""
+    return datetime.now(UTC)
 
 
 @dataclass(frozen=True, slots=True)
@@ -55,15 +60,18 @@ class FixtureReplay:
         }
 
 
-def fixture_replay() -> FixtureReplay:
+def fixture_replay(
+    *, client_id: str = FIXTURE_CLIENT_ID, now: datetime | None = None
+) -> FixtureReplay:
     """The complete demo story, concentrated here so it cannot drift across UI surfaces."""
+    started_at = now or utc_now()
     return FixtureReplay(
         call_id=FIXTURE_CALL_ID,
-        client_id=FIXTURE_CLIENT_ID,
+        client_id=client_id,
         twilio_call_sid=FIXTURE_CALL_SID,
         from_e164="+15555550101",
-        started_at=FIXTURE_CLOCK,
-        ended_at=FIXTURE_CLOCK + timedelta(minutes=3, seconds=12),
+        started_at=started_at,
+        ended_at=started_at + timedelta(minutes=3, seconds=12),
         outcome="booked",
         cost_cents=47,
         turns=(
@@ -111,6 +119,23 @@ def fixture_replay() -> FixtureReplay:
                 "attempt": 2,
                 "arguments": {"slot": "2026-08-19T16:00:00-05:00"},
             },
+            {
+                "name": "confirm_appointment",
+                "status": "ok",
+                "latency_ms": 18,
+                "attempt": 1,
+                "arguments": {
+                    "appointment_id": "fixture-appointment-confirmed",
+                    "confirmation": "simulated",
+                },
+            },
+            {
+                "name": "update_crm",
+                "status": "ok",
+                "latency_ms": 24,
+                "attempt": 1,
+                "arguments": {"contact_status": "booked", "update": "simulated"},
+            },
         ),
         events=(
             {
@@ -143,6 +168,26 @@ def fixture_replay() -> FixtureReplay:
                     "simulated": True,
                 },
             },
+            {
+                "at_ms": 7300,
+                "kind": "tool_call",
+                "payload": {
+                    "tool": "confirm_appointment",
+                    "appointment_id": "fixture-appointment-confirmed",
+                    "fixture": True,
+                    "simulated": True,
+                },
+            },
+            {
+                "at_ms": 7500,
+                "kind": "tool_call",
+                "payload": {
+                    "tool": "update_crm",
+                    "contact_status": "booked",
+                    "fixture": True,
+                    "simulated": True,
+                },
+            },
         ),
         analysis={
                 "summary": (
@@ -153,7 +198,11 @@ def fixture_replay() -> FixtureReplay:
             "intent": "urgent_hvac_repair",
             "sentiment": "concerned",
             "qa_score": 94,
-            "action_items": ["Safety escalation logged", "Fixture booking confirmed"],
+            "action_items": [
+                "Safety escalation logged",
+                "Fixture appointment confirmed",
+                "Simulated CRM update recorded",
+            ],
             "model": "fixture-replay",
         },
     )
@@ -245,12 +294,21 @@ class DemoReplayService:
 
     provider_clients_constructed = 0
 
-    def __init__(self, *, repository: FixtureReplayRepository, hub: EventHub) -> None:
+    def __init__(
+        self,
+        *,
+        repository: FixtureReplayRepository,
+        hub: EventHub,
+        client_id: str = FIXTURE_CLIENT_ID,
+        clock: Callable[[], datetime] = utc_now,
+    ) -> None:
         self._repository = repository
         self._hub = hub
+        self._client_id = client_id
+        self._clock = clock
 
     async def reset_and_replay(self) -> dict[str, Any]:
-        replay = fixture_replay()
+        replay = fixture_replay(client_id=self._client_id, now=self._clock())
         await self._repository.reset_fixture(client_id=replay.client_id)
         await self._repository.persist(replay)
         for event in replay.events:
@@ -270,8 +328,12 @@ class DemoReplayService:
         }
 
     async def fixture_data_ready(self) -> bool:
-        return await self._repository.fixture_data_ready(client_id=FIXTURE_CLIENT_ID)
+        return await self._repository.fixture_data_ready(client_id=self._client_id)
 
 
-def get_demo_service(session: AsyncSession) -> DemoReplayService:
-    return DemoReplayService(repository=SqlAlchemyFixtureReplayRepository(session), hub=get_hub())
+def get_demo_service(
+    session: AsyncSession, *, client_id: str = FIXTURE_CLIENT_ID
+) -> DemoReplayService:
+    return DemoReplayService(
+        repository=SqlAlchemyFixtureReplayRepository(session), hub=get_hub(), client_id=client_id
+    )

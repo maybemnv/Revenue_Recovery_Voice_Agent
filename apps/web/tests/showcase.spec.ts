@@ -16,6 +16,8 @@ test("fixture operator flow shows persisted call, degraded booking, escalation, 
   await expect(page.getByText("Transcript")).toBeVisible();
   await expect(page.getByText("degraded", { exact: true })).toBeVisible();
   await expect(page.getByText("safety_keyword")).toBeVisible();
+  await expect(page.getByText("confirm_appointment", { exact: true })).toBeVisible();
+  await expect(page.getByText("update_crm", { exact: true })).toBeVisible();
 
   await page.goto(`${webUrl}/live`);
   await expect(page.getByText("SSE connected")).toBeVisible();
@@ -25,7 +27,15 @@ test("fixture operator flow shows persisted call, degraded booking, escalation, 
 
   await page.goto(`${webUrl}/analytics`);
   await expect(page.getByText("Fixture analytics")).toBeVisible();
-  await expect(page.getByText("Booked")).toBeVisible();
+  await expect(page.getByLabel("Fixture analytics").getByText("Calls")).toBeVisible();
+  await expect(page.getByLabel("Fixture analytics").getByText("1", { exact: true })).toHaveCount(2);
+  await expect(page.getByLabel("Fixture analytics").getByText("$0.47", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Fixture analytics").getByText("465", { exact: true })).toBeVisible();
+
+  await page.goto(`${webUrl}/agent`);
+  await expect(page.getByRole("heading", { name: "Agent surface" })).toBeVisible();
+  await expect(page.getByText("prompt: pmpt_northside_v4")).toBeVisible();
+  await expect(page.getByText("service area")).toBeVisible();
 });
 
 test("fixture call ledger has no horizontal overflow at mobile width", async ({ page, request }) => {

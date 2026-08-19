@@ -32,6 +32,11 @@ router = APIRouter(prefix="/api", tags=["dashboard"], dependencies=[Depends(requ
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 
 
+def utc_now() -> datetime:
+    """Clock seam for bounded dashboard aggregates."""
+    return datetime.now(UTC)
+
+
 def _call_summary(call: Call) -> dict[str, Any]:
     duration = int((call.ended_at - call.started_at).total_seconds()) if call.ended_at else None
     return {
@@ -215,7 +220,7 @@ async def metrics(
     days: Annotated[int, Query(ge=1, le=90)] = 7,
 ) -> dict[str, Any]:
     """The four numbers on the dashboard header, computed in one round trip."""
-    since = datetime.now(UTC) - timedelta(days=days)
+    since = utc_now() - timedelta(days=days)
     base = select(Call).where(Call.started_at >= since)
     if client_id:
         base = base.where(Call.client_id == client_id)
@@ -270,7 +275,7 @@ async def latency_metrics(
     the gate arithmetic has one implementation and one set of tests. These are
     per-turn rows over a bounded window, not a table scan of raw audio.
     """
-    since = datetime.now(UTC) - timedelta(days=days)
+    since = utc_now() - timedelta(days=days)
 
     def scoped(stmt: Any, joined: Any) -> Any:
         stmt = stmt.join(Call, Call.id == joined).where(Call.started_at >= since)

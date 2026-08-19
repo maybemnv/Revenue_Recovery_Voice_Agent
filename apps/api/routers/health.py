@@ -1,8 +1,8 @@
 """Liveness and readiness.
 
-`/health` checks the two dependencies a call actually needs and returns 503 when
-either is down. `/health/live` is the cheap process-only probe for orchestrators
-that need to distinguish "restart me" from "do not send me traffic yet".
+`/health` is the cheap process-only probe for orchestrators that need to
+distinguish "restart me" from "do not send me traffic yet". `/health/ready`
+checks the dependencies needed to accept traffic.
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ from typing import Any
 from fastapi import APIRouter, Response
 from sqlalchemy import text
 
-from apps.api.db.session import get_engine
+from apps.api.db.session import get_engine, get_sessionmaker
 from apps.api.demo.replay import SqlAlchemyFixtureReplayRepository
 from apps.api.observability.live import get_hub
 from apps.api.settings import get_settings
@@ -21,8 +21,8 @@ router = APIRouter(tags=["ops"])
 
 
 @router.get("/health")
-async def health(response: Response) -> dict[str, Any]:
-    return await _readiness(response)
+async def health() -> dict[str, Any]:
+    return await liveness()
 
 
 @router.get("/health/live")
@@ -58,6 +58,13 @@ async def _check_redis() -> tuple[bool, str | None]:
         return False, type(exc).__name__
 
 
+async def _fixture_data_ready(*, client_id: str) -> bool:
+    """Read fixture readiness behind a replaceable session seam for route tests."""
+    async with get_sessionmaker()() as session:
+        repository = SqlAlchemyFixtureReplayRepository(session)
+        return await repository.fixture_data_ready(client_id=client_id)
+
+
 @router.get("/health/ready")
 async def ready(response: Response) -> dict[str, Any]:
     return await _readiness(response)
@@ -70,16 +77,7 @@ async def _readiness(response: Response) -> dict[str, Any]:
     settings = get_settings()
     fixture_ready = None
     if settings.fixture_mode and postgres_ok:
-        async with get_engine().connect() as connection:
-            # The repository's readiness seam needs a session because it uses the
-            # same model predicate as replay; the route owns transactions.
-            from sqlalchemy.ext.asyncio import AsyncSession
-
-            session = AsyncSession(bind=connection)
-            fixture_ready = await SqlAlchemyFixtureReplayRepository(session).fixture_data_ready(
-                client_id=settings.fixture_client_id
-            )
-            await session.close()
+        fixture_ready = await _fixture_data_ready(client_id=settings.fixture_client_id)
     checks = {
         "api": {"ok": True},
         "postgres": {"ok": postgres_ok, "error": postgres_error},
@@ -90,4 +88,9 @@ async def _readiness(response: Response) -> dict[str, Any]:
     ready_now = postgres_ok and redis_ok and (fixture_ready is not False)
     if not ready_now:
         response.status_code = 503
-    return {"status": "ready" if ready_now else "degraded", "checks": checks}
+    return {
+        "status": "ready" if ready_now else "degraded",
+        "fixture": settings.fixture_mode,
+        "simulated": settings.fixture_mode,
+        "checks": checks,
+    }
