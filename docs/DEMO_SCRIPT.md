@@ -1,5 +1,17 @@
 # Demo Script
 
+## Provider-free fixture showcase
+
+Start the deterministic fixture stack with `docker compose --profile fixture up
+--build -d`, verify `http://localhost:8101/health/ready`, then run
+`Invoke-RestMethod -Method Post http://localhost:8101/api/demo/reset-and-replay`.
+Open `http://localhost:3101/calls`: the Northside HVAC fixture shows a booked
+replay outcome, a visibly degraded scheduling attempt, and a safety escalation.
+Review its transcript/tool/event trail, trigger reset again while viewing Live,
+then open Analytics. All data is labelled fixture/simulated; no provider call,
+booking, CRM update, or human transfer is being claimed. Shut down with
+`docker compose --profile fixture down`.
+
 The demo is a six-minute call followed by dashboard replay. The call is an
 illustration of the controls in the code, not a claim that a worker or provider
 is healthy when it is not.

@@ -2,6 +2,7 @@ services:
   api:
     build: .
     env_file: .env
+    profiles: ["live"]
     ports:
       - "8000:8000"
     depends_on:
@@ -14,6 +15,7 @@ services:
   worker:
     build: .
     env_file: .env
+    profiles: ["live"]
     depends_on:
       redis:
         condition: service_healthy
@@ -30,8 +32,48 @@ services:
       NEXT_PUBLIC_API_BASE_URL: http://localhost:8000
     ports:
       - "3000:3000"
+    profiles: ["live"]
     depends_on:
       - api
+
+  api-fixture:
+    build: .
+    profiles: ["fixture"]
+    environment:
+      ENVIRONMENT: fixture
+      FIXTURE_MODE: "true"
+      FIXTURE_API_PORT: "8101"
+      FIXTURE_WEB_PORT: "3101"
+      FIXTURE_CLIENT_ID: northside-hvac
+      DATABASE_URL: postgresql+asyncpg://voice:voice@postgres:5432/voice
+      DATABASE_URL_SYNC: postgresql+psycopg://voice:voice@postgres:5432/voice
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+      PUBLIC_BASE_URL: http://localhost:8101
+      CORS_ALLOW_ORIGINS: http://localhost:3101
+      TWILIO_VALIDATE_SIGNATURES: "true"
+      TWILIO_RECORDING_ENABLED: "false"
+    ports:
+      - "8101:8101"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: sh -c "uv run alembic upgrade head && uv run uvicorn apps.api.main:app --host 0.0.0.0 --port 8101"
+
+  web-fixture:
+    build:
+      context: apps/web
+    profiles: ["fixture"]
+    environment:
+      API_BASE_URL: http://api-fixture:8101
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:8101
+    ports:
+      - "3101:3000"
+    depends_on:
+      - api-fixture
 
   postgres:
     image: pgvector/pgvector:pg16
