@@ -67,6 +67,12 @@ class Settings(BaseSettings):
     dashboard_api_token: str = ""
     dashboard_viewer_token: str = ""
 
+    # Fixture mode is the only mode that exposes the deterministic demo reset route.
+    fixture_mode: bool = False
+    fixture_api_port: int = 8101
+    fixture_web_port: int = 3101
+    fixture_client_id: str = "northside-hvac"
+
     client_config_dir: Path = REPO_ROOT / "config" / "clients"
 
     @field_validator("cors_allow_origins", mode="before")

@@ -13,6 +13,7 @@ from fastapi import APIRouter, Response
 from sqlalchemy import text
 
 from apps.api.db.session import get_engine
+from apps.api.demo.replay import SqlAlchemyFixtureReplayRepository
 from apps.api.observability.live import get_hub
 from apps.api.settings import get_settings
 
@@ -66,12 +67,27 @@ async def _readiness(response: Response) -> dict[str, Any]:
     postgres_ok, postgres_error = await _check_postgres()
     redis_ok, redis_error = await _check_redis()
 
+    settings = get_settings()
+    fixture_ready = None
+    if settings.fixture_mode and postgres_ok:
+        async with get_engine().connect() as connection:
+            # The repository's readiness seam needs a session because it uses the
+            # same model predicate as replay; the route owns transactions.
+            from sqlalchemy.ext.asyncio import AsyncSession
+
+            session = AsyncSession(bind=connection)
+            fixture_ready = await SqlAlchemyFixtureReplayRepository(session).fixture_data_ready(
+                client_id=settings.fixture_client_id
+            )
+            await session.close()
     checks = {
         "api": {"ok": True},
         "postgres": {"ok": postgres_ok, "error": postgres_error},
         "redis": {"ok": redis_ok, "error": redis_error},
     }
-    ready_now = postgres_ok and redis_ok
+    if settings.fixture_mode:
+        checks["fixture_data"] = {"ok": fixture_ready}
+    ready_now = postgres_ok and redis_ok and (fixture_ready is not False)
     if not ready_now:
         response.status_code = 503
     return {"status": "ready" if ready_now else "degraded", "checks": checks}

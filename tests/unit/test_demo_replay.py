@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
-
 import pytest
 
 from apps.api.demo.replay import (
@@ -88,7 +86,7 @@ async def test_replay_is_idempotent_and_marks_every_published_event_as_simulated
 async def test_replay_never_needs_a_provider_client_and_reports_fixture_readiness(
     repository: RecordingFixtureRepository,
 ) -> None:
-    """Replacing the local repository seam with a provider adapter must fail this offline contract."""
+    """A provider adapter in this local seam would violate the offline contract."""
     service = DemoReplayService(repository=repository, hub=EventHub())
 
     assert await service.fixture_data_ready() is False
