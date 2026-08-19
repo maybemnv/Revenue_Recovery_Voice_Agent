@@ -6,7 +6,7 @@ import uuid
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, timedelta, timezone
 from typing import Any
 
 from sqlalchemy import delete, select
@@ -65,6 +65,11 @@ def fixture_replay(
 ) -> FixtureReplay:
     """The complete demo story, concentrated here so it cannot drift across UI surfaces."""
     started_at = now or utc_now()
+    # The simulated slot must stay in the future relative to the injected
+    # replay clock so later showcases never claim a visit was booked in the past.
+    booked_slot = (started_at + timedelta(hours=2)).astimezone(
+        timezone(timedelta(hours=-5))
+    ).isoformat()
     return FixtureReplay(
         call_id=FIXTURE_CALL_ID,
         client_id=client_id,
@@ -117,7 +122,7 @@ def fixture_replay(
                 "status": "ok",
                 "latency_ms": 95,
                 "attempt": 2,
-                "arguments": {"slot": "2026-08-19T16:00:00-05:00"},
+                "arguments": {"slot": booked_slot},
             },
             {
                 "name": "confirm_appointment",

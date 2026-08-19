@@ -12,7 +12,7 @@ export default function CallDetailPage() {
 
   useEffect(() => {
     if (!params.id) return;
-    api<CallDetail>(`/api/calls/${params.id}`).then(setCall).catch(() => {
+    api<CallDetail>(`/calls/${params.id}`).then(setCall).catch(() => {
       setError("This call could not be loaded from the API.");
     });
   }, [params.id]);

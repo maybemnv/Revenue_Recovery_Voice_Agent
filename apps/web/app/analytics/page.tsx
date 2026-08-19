@@ -14,8 +14,8 @@ export default function AnalyticsPage() {
         if (!readiness.fixture_client_id) throw new Error("Fixture client is not configured");
         const query = `?client_id=${encodeURIComponent(readiness.fixture_client_id)}`;
         return Promise.all([
-          api<DashboardMetrics>(`/api/metrics${query}`),
-          api<LatencyMetrics>(`/api/metrics/latency${query}`),
+          api<DashboardMetrics>(`/metrics${query}`),
+          api<LatencyMetrics>(`/metrics/latency${query}`),
         ]);
       })
       .then(([aggregate, latencyReport]) => {

@@ -107,13 +107,15 @@ async def list_calls(
 
     calls = list(await session.scalars(stmt))
     total = await session.scalar(count_stmt) or 0
+    fixture_rows = [c for c in calls if c.twilio_call_sid == FIXTURE_CALL_SID]
     return {
         "items": [_call_summary(c) for c in calls],
         "total": total,
         "limit": limit,
         "offset": offset,
-        "fixture": bool(calls) and all(c.twilio_call_sid == FIXTURE_CALL_SID for c in calls),
-        "simulated": bool(calls) and all(c.twilio_call_sid == FIXTURE_CALL_SID for c in calls),
+        "fixture": bool(calls) and len(fixture_rows) == len(calls),
+        "simulated": bool(calls) and len(fixture_rows) == len(calls),
+        "contains_fixture": bool(fixture_rows),
     }
 
 
