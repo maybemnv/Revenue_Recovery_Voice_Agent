@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from apps.api.config.loader import ClientConfigNotFound, get_registry
 from apps.api.db.models import Call, CallAnalysis, CallEvent, ToolInvocation, Turn
 from apps.api.db.session import get_session
+from apps.api.demo.replay import FIXTURE_CALL_SID
 from apps.api.observability import metrics as metrics_mod
 from apps.api.routers.auth import require_viewer
 from apps.api.security.redaction import mask_e164
@@ -44,6 +45,8 @@ def _call_summary(call: Call) -> dict[str, Any]:
         "outcome": call.outcome,
         "cost_cents": call.cost_cents,
         "has_recording": bool(call.recording_url),
+        "fixture": call.twilio_call_sid == FIXTURE_CALL_SID,
+        "simulated": call.twilio_call_sid == FIXTURE_CALL_SID,
     }
 
 
@@ -104,6 +107,8 @@ async def list_calls(
         "total": total,
         "limit": limit,
         "offset": offset,
+        "fixture": bool(calls) and all(c.twilio_call_sid == FIXTURE_CALL_SID for c in calls),
+        "simulated": bool(calls) and all(c.twilio_call_sid == FIXTURE_CALL_SID for c in calls),
     }
 
 
@@ -231,12 +236,15 @@ async def metrics(
     ).one()
 
     total = row.total or 0
-    p50_latency = await session.scalar(
+    p50_stmt = (
         select(func.percentile_cont(0.5).within_group(Turn.latency_ms))
         .select_from(Turn)
         .join(Call, Call.id == Turn.call_id)
         .where(Turn.latency_ms.isnot(None), Call.started_at >= since)
     )
+    if client_id:
+        p50_stmt = p50_stmt.where(Call.client_id == client_id)
+    p50_latency = await session.scalar(p50_stmt)
 
     return {
         "window_days": days,
