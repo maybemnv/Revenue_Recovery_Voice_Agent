@@ -41,6 +41,21 @@ export type DashboardMetrics = {
   p50_response_latency_ms: number | null;
 };
 
+export type FixtureReadiness = {
+  fixture: boolean;
+  simulated: boolean;
+  fixture_client_id?: string;
+};
+
+export type LatencyMetrics = {
+  voice_to_voice: {
+    count: number;
+    p50_ms: number | null;
+    p95_ms: number | null;
+    max_ms: number | null;
+  };
+};
+
 // Calls stay same-origin so the Next.js server proxy can attach the viewer
 // token without exposing it to browser JavaScript or putting it in a URL.
 const base = "/api/backend";

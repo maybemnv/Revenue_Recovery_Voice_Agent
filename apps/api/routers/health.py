@@ -88,9 +88,12 @@ async def _readiness(response: Response) -> dict[str, Any]:
     ready_now = postgres_ok and redis_ok and (fixture_ready is not False)
     if not ready_now:
         response.status_code = 503
-    return {
+    result = {
         "status": "ready" if ready_now else "degraded",
         "fixture": settings.fixture_mode,
         "simulated": settings.fixture_mode,
         "checks": checks,
     }
+    if settings.fixture_mode:
+        result["fixture_client_id"] = settings.fixture_client_id
+    return result

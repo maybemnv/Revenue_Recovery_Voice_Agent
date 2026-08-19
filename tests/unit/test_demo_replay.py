@@ -238,6 +238,7 @@ def test_readiness_reports_fixture_labels_and_the_configured_fixture_client_with
     assert response.status_code == 503
     assert response.json()["fixture"] is True
     assert response.json()["simulated"] is True
+    assert response.json()["fixture_client_id"] == "fixture-east"
     assert response.json()["checks"]["fixture_data"] == {"ok": False}
     assert observed_client_ids == ["fixture-east"]
 
