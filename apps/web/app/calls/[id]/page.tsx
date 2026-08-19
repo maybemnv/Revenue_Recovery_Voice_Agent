@@ -12,7 +12,7 @@ export default function CallDetailPage() {
 
   useEffect(() => {
     if (!params.id) return;
-    api<CallDetail>(`/api/calls/${params.id}`).then(setCall).catch(() => {
+    api<CallDetail>(`/calls/${params.id}`).then(setCall).catch(() => {
       setError("This call could not be loaded from the API.");
     });
   }, [params.id]);
@@ -26,6 +26,7 @@ export default function CallDetailPage() {
         <div className="heading-copy"><Link className="eyebrow" href="/calls">← Back to call ledger</Link><h1>{call.from_e164}</h1><p className="subhead">{call.client_id} / {call.outcome ?? "in progress"} / {formatDuration(call.duration_seconds)}</p></div>
         {call.recording_url && <div className="detail-actions"><audio controls src={`/api/backend/calls/${call.id}/recording`}>Recording playback</audio></div>}
       </div>
+      {call.fixture && <div className="tool-chip">Simulated fixture replay — not a live provider confirmation.</div>}
       <div className="detail-grid">
         <section className="panel" aria-labelledby="transcript-title">
           <div className="panel-heading"><h2 id="transcript-title">Transcript</h2><span>{call.turns.length} turns</span></div>

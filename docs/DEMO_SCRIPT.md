@@ -1,8 +1,29 @@
 # Demo Script
 
-The demo is a six-minute call followed by dashboard replay. The call is an
-illustration of the controls in the code, not a claim that a worker or provider
-is healthy when it is not.
+## Default: provider-free fixture talk track
+
+Start the deterministic fixture stack with `docker compose --profile fixture up
+--build -d`, verify `http://localhost:8101/health/ready`, then run
+`Invoke-RestMethod -Method Post http://localhost:8101/api/demo/reset-and-replay`.
+Open `http://localhost:3101/calls`: the configured fixture client shows a booked
+replay outcome, a visibly degraded scheduling attempt, a simulated appointment
+confirmation, a simulated CRM update, and a safety escalation. Review its
+transcript/tool/event trail, trigger reset again while viewing Live, open
+Analytics, then open Agent to review the read-only configuration surface. All
+data is labelled fixture/simulated; no provider call, live booking, live CRM
+update, or human transfer is being claimed. Shut down with
+`docker compose --profile fixture down`.
+
+Say: "This is a deterministic fixture replay. The booking confirmation and CRM
+update are simulated records, not live provider confirmations." Then show the
+degraded scheduling record before the simulated confirmation, the safety
+escalation, the non-zero analytics, and the Agent configuration surface.
+
+## Optional: live-provider rehearsal (not the default showcase)
+
+Use this only after separately provisioning and verifying Twilio, OpenAI,
+Cal.com, HubSpot, Redis, PostgreSQL, and a public HTTPS endpoint. It is a live
+rehearsal, not evidence supplied by the default fixture sequence.
 
 1. Dial the configured Twilio number. Say: "This is the Northside HVAC demo."
    Show the consent preamble and the greeting.

@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from apps.api.config.loader import ClientConfigNotFound, get_registry
 from apps.api.db.models import Call, CallAnalysis, CallEvent, ToolInvocation, Turn
 from apps.api.db.session import get_session
+from apps.api.demo.replay import FIXTURE_CALL_SID
 from apps.api.observability import metrics as metrics_mod
 from apps.api.routers.auth import require_viewer
 from apps.api.security.redaction import mask_e164
@@ -29,6 +30,11 @@ from apps.api.settings import get_settings
 router = APIRouter(prefix="/api", tags=["dashboard"], dependencies=[Depends(require_viewer)])
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
+
+
+def utc_now() -> datetime:
+    """Clock seam for bounded dashboard aggregates."""
+    return datetime.now(UTC)
 
 
 def _call_summary(call: Call) -> dict[str, Any]:
@@ -44,6 +50,8 @@ def _call_summary(call: Call) -> dict[str, Any]:
         "outcome": call.outcome,
         "cost_cents": call.cost_cents,
         "has_recording": bool(call.recording_url),
+        "fixture": call.twilio_call_sid == FIXTURE_CALL_SID,
+        "simulated": call.twilio_call_sid == FIXTURE_CALL_SID,
     }
 
 
@@ -99,11 +107,15 @@ async def list_calls(
 
     calls = list(await session.scalars(stmt))
     total = await session.scalar(count_stmt) or 0
+    fixture_rows = [c for c in calls if c.twilio_call_sid == FIXTURE_CALL_SID]
     return {
         "items": [_call_summary(c) for c in calls],
         "total": total,
         "limit": limit,
         "offset": offset,
+        "fixture": bool(calls) and len(fixture_rows) == len(calls),
+        "simulated": bool(calls) and len(fixture_rows) == len(calls),
+        "contains_fixture": bool(fixture_rows),
     }
 
 
@@ -210,7 +222,7 @@ async def metrics(
     days: Annotated[int, Query(ge=1, le=90)] = 7,
 ) -> dict[str, Any]:
     """The four numbers on the dashboard header, computed in one round trip."""
-    since = datetime.now(UTC) - timedelta(days=days)
+    since = utc_now() - timedelta(days=days)
     base = select(Call).where(Call.started_at >= since)
     if client_id:
         base = base.where(Call.client_id == client_id)
@@ -231,12 +243,15 @@ async def metrics(
     ).one()
 
     total = row.total or 0
-    p50_latency = await session.scalar(
+    p50_stmt = (
         select(func.percentile_cont(0.5).within_group(Turn.latency_ms))
         .select_from(Turn)
         .join(Call, Call.id == Turn.call_id)
         .where(Turn.latency_ms.isnot(None), Call.started_at >= since)
     )
+    if client_id:
+        p50_stmt = p50_stmt.where(Call.client_id == client_id)
+    p50_latency = await session.scalar(p50_stmt)
 
     return {
         "window_days": days,
@@ -262,7 +277,7 @@ async def latency_metrics(
     the gate arithmetic has one implementation and one set of tests. These are
     per-turn rows over a bounded window, not a table scan of raw audio.
     """
-    since = datetime.now(UTC) - timedelta(days=days)
+    since = utc_now() - timedelta(days=days)
 
     def scoped(stmt: Any, joined: Any) -> Any:
         stmt = stmt.join(Call, Call.id == joined).where(Call.started_at >= since)

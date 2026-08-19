@@ -2,6 +2,28 @@
 
 # Deployment and Demo Readiness
 
+## Fixture showcase deployment
+
+For the provider-free sales fixture, Docker and Docker Compose are the only
+prerequisites. From the repository root, run:
+
+```powershell
+docker compose --profile fixture up --build -d
+Invoke-RestMethod http://localhost:8101/health
+Invoke-RestMethod http://localhost:8101/health/ready
+Invoke-RestMethod -Method Post http://localhost:8101/api/demo/reset-and-replay
+Invoke-WebRequest http://localhost:3101
+```
+
+The API is fixed at `8101` and the web dashboard at `3101`; Postgres and Redis
+remain Compose-internal dependencies. A ready response includes fixture-data
+readiness without transcript or credential content. The reset route is enabled
+only in fixture mode and clears only its deterministic labelled fixture call.
+The expected browser result is a clearly simulated Northside call with booked,
+degraded scheduling, escalation, live event, and analytics surfaces. End the
+fixture stack with `docker compose --profile fixture down`. This path does not
+verify live providers, recording, or any production deployment.
+
 This is the operational checklist for the Revenue Recovery Voice Agent. It
 covers provider accounts, environment configuration, infrastructure, live
 verification, and demo-day execution. Code and test work belongs in

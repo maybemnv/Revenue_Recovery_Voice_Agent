@@ -89,6 +89,31 @@ Install the following before starting local development:
 
 ## Docker Compose
 
+### Provider-free fixture showcase
+
+The fixture profile starts a deterministic Northside HVAC replay without Twilio,
+OpenAI, Cal.com, HubSpot, or other paid-provider credentials. It binds the API
+to `8101` and the dashboard to `3101`:
+
+```powershell
+docker compose --profile fixture up --build -d
+Invoke-RestMethod http://localhost:8101/health
+Invoke-RestMethod http://localhost:8101/health/ready
+Invoke-RestMethod -Method Post http://localhost:8101/api/demo/reset-and-replay
+Invoke-WebRequest http://localhost:3101
+```
+
+Open `http://localhost:3101/calls`, review the simulated call, then use Live
+and Analytics. `/health/ready` reports fixture-data readiness separately from
+process/dependency readiness. Reset only removes the named fixture record; it
+does not touch other customer calls. Shut it down with:
+
+```powershell
+docker compose --profile fixture down
+```
+
+Fixture output is simulated replay data, not live-provider verification.
+
 After creating `.env`, bring up the API, worker, dashboard, PostgreSQL, and
 Redis together:
 

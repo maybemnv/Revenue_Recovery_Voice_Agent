@@ -12,7 +12,11 @@ type RouteContext = { params: Promise<{ path: string[] }> };
 function backendUrl(path: string[], request: NextRequest): string {
   const base = (process.env.API_BASE_URL ?? process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000").replace(/\/$/, "");
   const suffix = path.map(encodeURIComponent).join("/");
-  return `${base}/api/${suffix}${new URL(request.url).search}`;
+  // Health endpoints live at the API root (`/health/ready`), while dashboard
+  // routes are registered under `/api`; the proxy prepends `/api/` only for
+  // the latter so both trees stay reachable through the same catch-all.
+  const prefix = path[0] === "health" ? "" : "/api/";
+  return `${base}${prefix}${suffix}${new URL(request.url).search}`;
 }
 
 function backendHeaders(request: NextRequest): Headers {

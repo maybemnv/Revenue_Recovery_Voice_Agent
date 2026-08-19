@@ -40,14 +40,16 @@ class LiveEvent:
 class EventHub:
     _subscribers: set[asyncio.Queue[LiveEvent]] = field(default_factory=set)
 
-    async def publish(self, call_id: str, kind: str, payload: dict[str, Any]) -> None:
+    async def publish(
+        self, call_id: str, kind: str, payload: dict[str, Any], *, at: str | None = None
+    ) -> None:
         if not self._subscribers:
             return
         event = LiveEvent(
             call_id=call_id,
             kind=kind,
             payload=payload,
-            at=datetime.now(UTC).isoformat(),
+            at=at or datetime.now(UTC).isoformat(),
         )
         for queue in list(self._subscribers):
             try:

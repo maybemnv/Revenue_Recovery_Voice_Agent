@@ -17,7 +17,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from apps.api.config.loader import get_registry
 from apps.api.media import gateway
 from apps.api.observability.logging import configure_logging, get_logger
-from apps.api.routers import dashboard, health, stream
+from apps.api.routers import dashboard, demo, health, stream
 from apps.api.routers.auth import auth_disabled
 from apps.api.settings import get_settings
 from apps.api.telephony import status_webhook, twiml
@@ -91,6 +91,7 @@ def create_app() -> FastAPI:
     app.include_router(gateway.router)
     app.include_router(dashboard.router)
     app.include_router(stream.router)
+    app.include_router(demo.router)
     return app
 
 
