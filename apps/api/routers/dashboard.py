@@ -14,7 +14,9 @@ from typing import Annotated, Any
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.encoders import jsonable_encoder
 from fastapi.responses import Response
+from pydantic import ValidationError
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -23,7 +25,7 @@ from apps.api.db.models import Call, CallAnalysis, CallEvent, ToolInvocation, Tu
 from apps.api.db.session import get_session
 from apps.api.demo.replay import FIXTURE_CALL_SID
 from apps.api.observability import metrics as metrics_mod
-from apps.api.routers.auth import require_viewer
+from apps.api.routers.auth import require_admin, require_viewer
 from apps.api.security.redaction import mask_e164
 from apps.api.settings import get_settings
 
@@ -76,6 +78,22 @@ async def get_client_config(client_id: str) -> dict[str, Any]:
     except ClientConfigNotFound as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return cfg.model_dump(mode="json")
+
+
+@router.put("/fixture/clients/{client_id}/config", dependencies=[Depends(require_admin)])
+async def replace_fixture_client_config(client_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    """Fixture-only config editing; production YAML remains read-only here."""
+    if not get_settings().fixture_mode:
+        raise HTTPException(status_code=404, detail="fixture config editing is disabled")
+    try:
+        config = get_registry().replace_fixture_config(client_id, payload)
+    except ClientConfigNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValidationError as exc:
+        raise HTTPException(status_code=422, detail=jsonable_encoder(exc.errors())) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return config.model_dump(mode="json")
 
 
 @router.get("/calls")

@@ -27,9 +27,14 @@ def auth_disabled() -> bool:
     return not settings.dashboard_api_token and not settings.dashboard_viewer_token
 
 
-async def require_viewer(authorization: str | None = Header(default=None)) -> str:
+async def require_viewer(
+    authorization: str | None = Header(default=None),
+    x_fixture_role: str | None = Header(default=None),
+) -> str:
     """Read access. The admin token also satisfies this."""
     if auth_disabled():
+        if get_settings().fixture_mode:
+            return x_fixture_role if x_fixture_role in {"admin", "viewer"} else "viewer"
         return "anonymous"
     settings = get_settings()
     token = _token_from(authorization)
@@ -42,9 +47,14 @@ async def require_viewer(authorization: str | None = Header(default=None)) -> st
     raise HTTPException(status_code=401, detail="invalid or missing token")
 
 
-async def require_admin(authorization: str | None = Header(default=None)) -> str:
+async def require_admin(
+    authorization: str | None = Header(default=None),
+    x_fixture_role: str | None = Header(default=None),
+) -> str:
     """Write access. The viewer token is explicitly not enough."""
     if auth_disabled():
+        if get_settings().fixture_mode and x_fixture_role != "admin":
+            raise HTTPException(status_code=403, detail="fixture admin role required")
         return "anonymous"
     settings = get_settings()
     token = _token_from(authorization)

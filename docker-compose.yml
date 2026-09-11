@@ -66,6 +66,7 @@ services:
     profiles: ["fixture"]
     environment:
       API_BASE_URL: http://api-fixture:8101
+      FIXTURE_MODE: "true"
       NEXT_PUBLIC_API_BASE_URL: http://localhost:8101
     ports:
       - "3101:3000"

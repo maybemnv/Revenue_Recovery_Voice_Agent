@@ -756,7 +756,7 @@ Five phases, one per week. Each ends with something demoable on a real phone num
 - [ ] Live view over SSE: waveform, streaming transcript, active tool indicator, under 500 ms behind the real call
 - [ ] Escalation timeline component rendering `call_events` chronologically
 - [ ] Analytics: calls by hour, outcome distribution, recovered-revenue estimate, p50/p95 latency trend
-- [ ] Agent config editor writing `config/clients/*.yaml` with schema validation and no restart required
+- [x] Fixture Agent config editor with schema validation, viewer/admin roles, and resettable runtime overrides; production YAML writes and audit records remain separate work
 - [ ] Mobile call-detail view verified at 390 px
 - [ ] Architecture diagram exported; 3-minute demo video recorded against the Trace A scenario; README with a one-command Docker Compose bring-up
 - **Demo:** the full walkthrough — place a live call from a phone and narrate the dashboard as it happens.

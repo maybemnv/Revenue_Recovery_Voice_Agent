@@ -78,3 +78,49 @@ test("fixture call ledger has no horizontal overflow at mobile width", async ({ 
   await expect(page.getByText("Simulated fixture data")).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy();
 });
+
+test("fixture admin saves validated config while the viewer remains read-only", async ({ page }) => {
+  let config = {
+    client_id: "northside-hvac",
+    display_name: "Northside HVAC",
+    phone_number: "+13125550123",
+    timezone: "America/Chicago",
+    realtime: { instructions: "Fixture receptionist." },
+  };
+  await page.route("**/api/backend/**", async route => {
+    const request = route.request();
+    const url = new URL(request.url());
+    if (url.pathname.endsWith("/clients")) {
+      return route.fulfill({ json: [{ client_id: config.client_id, display_name: config.display_name }] });
+    }
+    if (request.method() === "GET" && url.pathname.endsWith("/config")) return route.fulfill({ json: config });
+    if (request.method() === "PUT" && url.pathname.endsWith("/config")) {
+      expect(request.headers()["x-fixture-role"]).toBe("admin");
+      if (request.postDataJSON().phone_number === "not-a-number") {
+        return route.fulfill({
+          status: 422,
+          json: { detail: [{ loc: ["phone_number"], msg: "Value error, phone_number must be E.164" }] },
+        });
+      }
+      config = request.postDataJSON();
+      return route.fulfill({ json: config });
+    }
+    return route.abort();
+  });
+
+  await page.goto("/agent");
+  await expect(page.getByLabel("Fixture role")).toHaveValue("viewer");
+  await expect(page.getByRole("button", { name: "Save fixture configuration" })).toBeDisabled();
+  await page.getByLabel("Fixture role").selectOption("admin");
+  await page.getByLabel("Configuration JSON").fill("not json");
+  await page.getByRole("button", { name: "Save fixture configuration" }).click();
+  await expect(page.getByText("Configuration must be valid JSON before it can be saved.", { exact: true })).toBeVisible();
+  await page.getByLabel("Configuration JSON").fill(JSON.stringify({ ...config, phone_number: "not-a-number" }));
+  await page.getByRole("button", { name: "Save fixture configuration" }).click();
+  await expect(page.getByText("phone_number: Value error, phone_number must be E.164", { exact: true })).toBeVisible();
+  await page.getByLabel("Configuration JSON").fill(JSON.stringify({ ...config, display_name: "Fixture HVAC" }));
+  await page.getByRole("button", { name: "Save fixture configuration" }).click();
+  await expect(page.getByText("Saved fixture configuration.")).toBeVisible();
+  await page.reload();
+  await expect(page.getByLabel("Configuration JSON")).toHaveValue(JSON.stringify(config, null, 2));
+});

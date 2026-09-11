@@ -27,6 +27,7 @@ class ClientConfigRegistry:
         self._by_id: dict[str, ClientConfig] = {}
         self._by_number: dict[str, ClientConfig] = {}
         self._mtimes: dict[Path, float] = {}
+        self._fixture_overrides: dict[str, ClientConfig] = {}
 
     # -- loading ----------------------------------------------------------
     def _yaml_paths(self) -> list[Path]:
@@ -64,7 +65,7 @@ class ClientConfigRegistry:
     def get(self, client_id: str) -> ClientConfig:
         self._ensure_fresh()
         try:
-            return self._by_id[client_id]
+            return self._fixture_overrides.get(client_id, self._by_id[client_id])
         except KeyError as exc:
             raise ClientConfigNotFound(f"no config for client_id {client_id!r}") from exc
 
@@ -72,13 +73,37 @@ class ClientConfigRegistry:
         """Twilio's `To` number is the only routing key we get on an inbound call."""
         self._ensure_fresh()
         try:
-            return self._by_number[e164]
+            config = self._by_number[e164]
+            return self._fixture_overrides.get(config.client_id, config)
         except KeyError as exc:
             raise ClientConfigNotFound(f"no client bound to number {e164!r}") from exc
 
     def all(self) -> list[ClientConfig]:
         self._ensure_fresh()
-        return list(self._by_id.values())
+        return [
+            self._fixture_overrides.get(client_id, config)
+            for client_id, config in self._by_id.items()
+        ]
+
+    def replace_fixture_config(self, client_id: str, payload: object) -> ClientConfig:
+        """Replace one fixture config in memory without changing its routing identity."""
+        with self._lock:
+            self._ensure_fresh()
+            try:
+                original = self._by_id[client_id]
+            except KeyError as exc:
+                raise ClientConfigNotFound(f"no config for client_id {client_id!r}") from exc
+            config = ClientConfig.model_validate(payload)
+            if config.client_id != original.client_id:
+                raise ValueError("fixture config client_id must match the route client")
+            if config.phone_number != original.phone_number:
+                raise ValueError("fixture config phone_number cannot change routing")
+            self._fixture_overrides[client_id] = config
+            return config
+
+    def reset_fixture_config(self, client_id: str) -> None:
+        with self._lock:
+            self._fixture_overrides.pop(client_id, None)
 
 
 def load_client_config(path: Path) -> ClientConfig:

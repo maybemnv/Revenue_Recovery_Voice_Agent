@@ -120,11 +120,12 @@ release:
 
 ## Dashboard and configuration features
 
+- [x] Complete the fixture-only Agent editor: viewer/admin labels, server-enforced viewer write rejection, schema validation, and resettable in-memory client overrides. Fixture replay clears the configured client's override; checked-in YAML is unchanged.
 - [ ] Implement analytics for calls by hour, outcome distribution, recovered
   revenue estimate, and p50/p95 latency trend rather than leaving the current
   empty-state page as the production surface.
-- [ ] Implement the admin-only client YAML editor using schema validation,
-  atomic writes, and an audit record for each change.
+- [ ] Implement production client YAML writes with schema validation, atomic
+  writes, and an audit record for each change. This is distinct from the resettable fixture editor.
 - [ ] Prove client YAML hot reload takes effect on the next call without a
   media-plane redeploy and without corrupting an in-flight call's config.
 - [ ] Add explicit error/loading/auth states for all dashboard pages and API
