@@ -24,6 +24,7 @@ graph LR
 - Twilio webhook and media-stream boundary.
 - OpenAI Realtime relay and deterministic provider-free fixture replay.
 - Call, transcript, tool, interruption, latency, cost, and escalation views.
+- Fixture-only admin/viewer config editing with validated, resettable runtime overrides.
 - Post-call recording, analysis, and CRM synchronization worker contracts.
 - Safety paths for consent, opt-out, provider degradation, and human transfer.
 

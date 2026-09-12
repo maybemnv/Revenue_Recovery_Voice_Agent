@@ -7,6 +7,7 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from apps.api.config.loader import get_registry
 from apps.api.db.session import get_session
 from apps.api.demo.replay import get_demo_service
 from apps.api.settings import get_settings
@@ -20,4 +21,5 @@ async def reset_and_replay(session: SessionDep) -> dict[str, Any]:
     settings = get_settings()
     if not settings.fixture_mode:
         raise HTTPException(status_code=404, detail="fixture replay is disabled")
+    get_registry().reset_fixture_config(settings.fixture_client_id)
     return await get_demo_service(session, client_id=settings.fixture_client_id).reset_and_replay()

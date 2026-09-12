@@ -9,9 +9,11 @@ Open `http://localhost:3101/calls`: the configured fixture client shows a booked
 replay outcome, a visibly degraded scheduling attempt, a simulated appointment
 confirmation, a simulated CRM update, and a safety escalation. Review its
 transcript/tool/event trail, trigger reset again while viewing Live, open
-Analytics, then open Agent to review the read-only configuration surface. All
-data is labelled fixture/simulated; no provider call, live booking, live CRM
-update, or human transfer is being claimed. Shut down with
+Analytics, then open Agent to show the explicit fixture Viewer/Admin control.
+Viewer writes are rejected by the API; Admin edits are schema-validated runtime
+overrides and the next fixture reset restores the checked-in default. All data is
+labelled fixture/simulated; no provider call, live booking, live CRM update, or
+human transfer is being claimed. Shut down with
 `docker compose --profile fixture down`.
 
 Say: "This is a deterministic fixture replay. The booking confirmation and CRM

@@ -18,7 +18,8 @@ Invoke-WebRequest http://localhost:3101
 The API is fixed at `8101` and the web dashboard at `3101`; Postgres and Redis
 remain Compose-internal dependencies. A ready response includes fixture-data
 readiness without transcript or credential content. The reset route is enabled
-only in fixture mode and clears only its deterministic labelled fixture call.
+only in fixture mode and clears only its deterministic labelled fixture call and
+that fixture client's in-memory configuration override.
 The expected browser result is a clearly simulated Northside call with booked,
 degraded scheduling, escalation, live event, and analytics surfaces. End the
 fixture stack with `docker compose --profile fixture down`. This path does not

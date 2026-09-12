@@ -60,9 +60,32 @@ export type LatencyMetrics = {
 // token without exposing it to browser JavaScript or putting it in a URL.
 const base = "/api/backend";
 
-export async function api<T>(path: string): Promise<T> {
-  const response = await fetch(`${base}${path}`, { cache: "no-store" });
-  if (!response.ok) throw new Error(`API returned ${response.status}`);
+export type FixtureRole = "admin" | "viewer";
+
+type ApiErrorBody = { detail?: unknown };
+
+export class ApiError extends Error {
+  constructor(readonly status: number, readonly detail: unknown) {
+    super(`API returned ${status}`);
+  }
+}
+
+export async function api<T>(
+  path: string,
+  options: RequestInit & { fixtureRole?: FixtureRole } = {},
+): Promise<T> {
+  const headers = new Headers(options.headers);
+  if (options.fixtureRole) headers.set("x-fixture-role", options.fixtureRole);
+  const response = await fetch(`${base}${path}`, { ...options, headers, cache: "no-store" });
+  if (!response.ok) {
+    let detail: unknown;
+    try {
+      detail = (await response.json() as ApiErrorBody).detail;
+    } catch {
+      // The status is still enough for callers when an upstream error has no JSON body.
+    }
+    throw new ApiError(response.status, detail);
+  }
   return response.json() as Promise<T>;
 }
 

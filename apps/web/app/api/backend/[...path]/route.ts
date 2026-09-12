@@ -28,7 +28,13 @@ function backendHeaders(request: NextRequest): Headers {
 
   // The token is read only by this server-side route. It is never serialized
   // into the page, browser bundle, query string, or SSE URL.
-  const token = process.env.DASHBOARD_VIEWER_TOKEN ?? process.env.DASHBOARD_API_TOKEN;
+  const fixtureRole = request.headers.get("x-fixture-role");
+  if (process.env.FIXTURE_MODE === "true" && fixtureRole && ["admin", "viewer"].includes(fixtureRole)) {
+    headers.set("x-fixture-role", fixtureRole);
+  }
+  const token = process.env.FIXTURE_MODE === "true"
+    ? undefined
+    : process.env.DASHBOARD_VIEWER_TOKEN ?? process.env.DASHBOARD_API_TOKEN;
   if (token) headers.set("authorization", `Bearer ${token}`);
   return headers;
 }
