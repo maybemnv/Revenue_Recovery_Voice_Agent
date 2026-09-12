@@ -32,8 +32,8 @@ function backendHeaders(request: NextRequest): Headers {
   if (process.env.FIXTURE_MODE === "true" && fixtureRole && ["admin", "viewer"].includes(fixtureRole)) {
     headers.set("x-fixture-role", fixtureRole);
   }
-  const token = process.env.FIXTURE_MODE === "true" && fixtureRole === "admin"
-    ? process.env.DASHBOARD_API_TOKEN
+  const token = process.env.FIXTURE_MODE === "true"
+    ? undefined
     : process.env.DASHBOARD_VIEWER_TOKEN ?? process.env.DASHBOARD_API_TOKEN;
   if (token) headers.set("authorization", `Bearer ${token}`);
   return headers;
