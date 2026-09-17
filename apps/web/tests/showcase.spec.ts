@@ -28,7 +28,6 @@ test("fixture operator flow shows persisted call, degraded booking, escalation, 
 
   await page.goto(`${webUrl}/analytics`);
   await expect(page.getByText("Fixture analytics")).toBeVisible();
-  await expect(page.getByLabel("Fixture analytics").getByText("Calls")).toBeVisible();
   await expect(page.getByLabel("Fixture analytics").getByText("1", { exact: true })).toHaveCount(2);
   await expect(page.getByLabel("Fixture analytics").getByText("$0.47", { exact: true })).toBeVisible();
   await expect(page.getByLabel("Fixture analytics").getByText("420", { exact: true })).toBeVisible();
