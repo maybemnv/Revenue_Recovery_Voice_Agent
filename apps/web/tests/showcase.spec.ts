@@ -29,7 +29,7 @@ test("fixture operator flow shows persisted call, degraded booking, escalation, 
   const metricRequests: string[] = [];
   page.on("request", request => {
     const url = new URL(request.url());
-    if (url.pathname.endsWith("/metrics") || url.pathname.endsWith("/metrics/latency")) {
+    if (url.pathname.includes("/metrics")) {
       metricRequests.push(request.url());
     }
   });
