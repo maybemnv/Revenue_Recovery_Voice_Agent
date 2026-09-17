@@ -1,4 +1,11 @@
+import { BlockList } from "node:net";
 import { NextRequest } from "next/server";
+
+const localAddresses = new BlockList();
+localAddresses.addSubnet("127.0.0.0", 8, "ipv4");
+localAddresses.addAddress("0.0.0.0", "ipv4");
+localAddresses.addAddress("::1", "ipv6");
+localAddresses.addAddress("::", "ipv6");
 
 const FORWARDED_RESPONSE_HEADERS = [
   "cache-control",
@@ -13,8 +20,10 @@ function backendUrl(path: string[], request: NextRequest): string {
   const configuredBase = process.env.API_BASE_URL ?? process.env.NEXT_PUBLIC_API_BASE_URL;
   const base = configuredBase ?? (process.env.APP_ENV === "local-fixture" ? "http://localhost:8000" : "");
   if (!base) throw new Error("API_BASE_URL is required outside APP_ENV=local-fixture");
-  const hostname = new URL(base).hostname;
-  if (process.env.APP_ENV !== "local-fixture" && ["localhost", "127.0.0.1", "::1"].includes(hostname)) {
+  const hostname = new URL(base).hostname.replace(/^\[|\]$/g, "").replace(/\.$/, "");
+  const localHost = hostname === "localhost" || hostname.endsWith(".localhost") ||
+    localAddresses.check(hostname, hostname.includes(":") ? "ipv6" : "ipv4");
+  if (process.env.APP_ENV !== "local-fixture" && localHost) {
     throw new Error("localhost API URLs are only allowed in APP_ENV=local-fixture");
   }
   const normalizedBase = base.replace(/\/$/, "");

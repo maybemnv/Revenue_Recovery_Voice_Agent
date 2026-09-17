@@ -3,12 +3,39 @@
 from __future__ import annotations
 
 from functools import lru_cache
+from ipaddress import IPv6Address, ip_address
 from pathlib import Path
+from socket import inet_aton
+from urllib.parse import urlsplit
 
 from pydantic import AliasChoices, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
+def _is_local_url(value: str) -> bool:
+    try:
+        parsed = urlsplit(value)
+        host = (parsed.hostname or "").lower().rstrip(".")
+        if not parsed.scheme or not host:
+            raise ValueError
+        _ = parsed.port  # Validate malformed ports without echoing credentials.
+    except ValueError:
+        raise ValueError("runtime URLs must include a valid scheme and host") from None
+    if host == "localhost" or host.endswith(".localhost"):
+        return True
+    try:
+        address = ip_address(host)
+    except ValueError:
+        try:
+            # Account for legacy numeric IPv4 forms accepted by socket clients.
+            address = ip_address(inet_aton(host))
+        except OSError:
+            return False
+    if isinstance(address, IPv6Address) and address.ipv4_mapped is not None:
+        address = address.ipv4_mapped
+    return address.is_loopback or address.is_unspecified
 
 
 class Settings(BaseSettings):
@@ -118,8 +145,11 @@ class Settings(BaseSettings):
                 self.celery_result_backend,
                 *self.cors_allow_origins,
             ]
-            if any("localhost" in value or "127.0.0.1" in value for value in local_values):
-                raise ValueError("localhost URLs are only allowed in APP_ENV=local-fixture")
+            if any(_is_local_url(value) for value in local_values):
+                raise ValueError(
+                    "localhost URLs and loopback/unspecified hosts are only allowed "
+                    "in APP_ENV=local-fixture"
+                )
         return self
 
     @property

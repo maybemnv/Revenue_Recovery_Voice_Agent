@@ -8,7 +8,7 @@ For the provider-free sales fixture, Docker and Docker Compose are the only
 prerequisites. From the repository root, run:
 
 ```powershell
-docker compose --profile fixture up --build -d
+docker compose --profile fixture up --build -d api-fixture web-fixture
 Invoke-RestMethod http://localhost:8101/health
 Invoke-RestMethod http://localhost:8101/health/ready
 Invoke-RestMethod -Method Post http://localhost:8101/api/demo/reset-and-replay
@@ -88,8 +88,11 @@ different database/Redis URLs.
    CELERY_RESULT_BACKEND=redis://redis:6379/2
    ```
 
-   If the API is started directly on Windows while only Postgres and Redis
-   run in Docker, use `localhost` instead. Do not mix the two forms.
+   The example defaults to `APP_ENV=staging` and `FIXTURE_MODE=false`.
+   Supply both dashboard tokens and non-loopback runtime URLs before starting
+   the ordinary services. A copied example with blank tokens fails startup.
+   For provider-free local development, use the explicit fixture services above;
+   they supply their own environment and require no provider secrets.
 
 3. Start Docker Desktop's Linux engine, then validate and start the stack:
 

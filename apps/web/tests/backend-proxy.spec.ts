@@ -2,6 +2,60 @@ import { expect, test } from "@playwright/test";
 import { NextRequest } from "next/server";
 import { GET } from "../app/api/backend/[...path]/route";
 
+const savedEnvironment = { ...process.env };
+test.afterEach(() => {
+  process.env = { ...savedEnvironment };
+});
+
+for (const host of ["[::1]", "[0:0:0:0:0:0:0:1]", "[::]", "0.0.0.0", "127.4.3.2", "127.1", "[::ffff:127.0.0.1]", "[::ffff:0.0.0.0]", "LOCALHOST.", "api.localhost"]) {
+  test(`production proxy rejects ${host} before forwarding a token`, async () => {
+    process.env.APP_ENV = "production";
+    process.env.API_BASE_URL = `http://${host}:8000`;
+    process.env.DASHBOARD_VIEWER_TOKEN = "test-private-token";
+    let calls = 0;
+    const originalFetch = global.fetch;
+    global.fetch = async () => {
+      calls++;
+      return new Response(null, { status: 204 });
+    };
+    try {
+      const response = await GET(
+        new NextRequest("https://dashboard.example/api/backend/metrics"),
+        { params: Promise.resolve({ path: ["metrics"] }) },
+      );
+      expect(response.status).toBe(502);
+      expect(calls).toBe(0);
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+}
+
+test("production proxy permits private network backends with viewer authorization", async () => {
+  process.env.APP_ENV = "production";
+  process.env.API_BASE_URL = "http://10.0.0.2:8000";
+  process.env.DASHBOARD_VIEWER_TOKEN = "test-viewer";
+  const originalFetch = global.fetch;
+  let target: unknown;
+  let headers: Headers | undefined;
+  global.fetch = async (input, init) => {
+    target = input;
+    headers = new Headers(init?.headers);
+    return new Response(null, { status: 204 });
+  };
+  try {
+    const response = await GET(
+      new NextRequest("https://dashboard.example/api/backend/metrics?days=3"),
+      { params: Promise.resolve({ path: ["metrics"] }) },
+    );
+    expect(response.status).toBe(204);
+    expect(target).toBe("http://10.0.0.2:8000/api/metrics?days=3");
+    expect(headers?.get("authorization")).toBe("Bearer test-viewer");
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
 async function forwardedHeaders(requestHeaders: HeadersInit, fixtureMode: string): Promise<Headers> {
   process.env.APP_ENV = "local-fixture";
   process.env.FIXTURE_MODE = fixtureMode;

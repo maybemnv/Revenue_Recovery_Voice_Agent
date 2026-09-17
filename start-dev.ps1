@@ -9,7 +9,7 @@ if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
 }
 
 $escapedRoot = $Root.Replace("'", "''")
-$command = "`$Host.UI.RawUI.WindowTitle = 'Revenue Recovery Voice Agent'; Set-Location -LiteralPath '$escapedRoot'; docker compose --profile fixture up --build"
+$command = "`$Host.UI.RawUI.WindowTitle = 'Revenue Recovery Voice Agent'; Set-Location -LiteralPath '$escapedRoot'; docker compose --profile fixture up --build api-fixture web-fixture"
 Start-Process -FilePath "powershell.exe" -ArgumentList @(
     "-NoExit", "-ExecutionPolicy", "Bypass", "-Command", $command
 )
