@@ -31,6 +31,29 @@ for (const host of ["[::1]", "[0:0:0:0:0:0:0:1]", "[::]", "0.0.0.0", "127.4.3.2"
   });
 }
 
+test("fixture proxy preserves the slash for root health routes", async () => {
+  process.env.APP_ENV = "local-fixture";
+  process.env.FIXTURE_MODE = "true";
+  process.env.API_BASE_URL = "http://api-fixture:8101";
+
+  const originalFetch = global.fetch;
+  let target: unknown;
+  global.fetch = async (input) => {
+    target = input;
+    return Response.json({ status: "ready", fixture: true, fixture_client_id: "northside-hvac" });
+  };
+  try {
+    const response = await GET(
+      new NextRequest("http://dashboard.test/api/backend/health/ready"),
+      { params: Promise.resolve({ path: ["health", "ready"] }) },
+    );
+    expect(response.status).toBe(200);
+    expect(target).toBe("http://api-fixture:8101/health/ready");
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
 test("production proxy permits private network backends with viewer authorization", async () => {
   process.env.APP_ENV = "production";
   process.env.API_BASE_URL = "http://10.0.0.2:8000";
