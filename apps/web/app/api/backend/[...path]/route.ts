@@ -31,7 +31,7 @@ function backendUrl(path: string[], request: NextRequest): string {
   // Health endpoints live at the API root (`/health/ready`), while dashboard
   // routes are registered under `/api`; the proxy prepends `/api/` only for
   // the latter so both trees stay reachable through the same catch-all.
-  const prefix = path[0] === "health" ? "" : "/api/";
+  const prefix = path[0] === "health" ? "/" : "/api/";
   return `${normalizedBase}${prefix}${suffix}${new URL(request.url).search}`;
 }
 
