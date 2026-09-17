@@ -9,7 +9,7 @@ export default defineConfig({
   webServer: externalServers
     ? undefined
     : {
-        command: "docker compose --profile fixture up --build -d",
+        command: "docker compose --profile fixture up --build",
         url: "http://localhost:3101",
         timeout: 180_000,
         reuseExistingServer: true,
