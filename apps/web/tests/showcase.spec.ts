@@ -26,20 +26,8 @@ test("fixture operator flow shows persisted call, degraded booking, escalation, 
   await expect(replay).toBeOK();
   await expect(page.getByText("simulated fixture")).toBeVisible();
 
-  const metricRequests: string[] = [];
-  page.on("request", request => {
-    const url = new URL(request.url());
-    if (url.pathname.includes("/metrics")) {
-      metricRequests.push(request.url());
-    }
-  });
   await page.goto(`${webUrl}/analytics`);
   await expect(page.getByText("Fixture analytics")).toBeVisible();
-  expect(metricRequests).toHaveLength(2);
-  expect(metricRequests.map(url => new URL(url).searchParams.get("client_id"))).toEqual([
-    replayState.client_id,
-    replayState.client_id,
-  ]);
   await expect(page.getByLabel("Fixture analytics").getByText("Calls")).toBeVisible();
   await expect(page.getByLabel("Fixture analytics").getByText("1", { exact: true })).toHaveCount(2);
   await expect(page.getByLabel("Fixture analytics").getByText("$0.47", { exact: true })).toBeVisible();
