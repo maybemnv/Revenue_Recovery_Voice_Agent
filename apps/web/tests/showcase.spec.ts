@@ -28,8 +28,10 @@ test("fixture operator flow shows persisted call, degraded booking, escalation, 
 
   const metricRequests: string[] = [];
   page.on("request", request => {
-    if (request.url().includes("/api/backend/metrics?")) metricRequests.push(request.url());
-    if (request.url().includes("/api/backend/metrics/latency?")) metricRequests.push(request.url());
+    const url = new URL(request.url());
+    if (url.pathname.endsWith("/metrics") || url.pathname.endsWith("/metrics/latency")) {
+      metricRequests.push(request.url());
+    }
   });
   await page.goto(`${webUrl}/analytics`);
   await expect(page.getByText("Fixture analytics")).toBeVisible();
