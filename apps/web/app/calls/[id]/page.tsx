@@ -46,7 +46,7 @@ export default function CallDetailPage() {
             {call.events.length === 0 && <div className="empty">No events persisted.</div>}
           </div>
           <div className="panel-heading panel-spaced"><h2>Tool calls</h2><span>{call.tool_invocations.length}</span></div>
-          {call.tool_invocations.map((tool, index) => <div className={`tool-chip ${tool.status === "ok" ? "" : "failed"}`} key={`${tool.name}-${index}`}>{tool.name} / {tool.status} / {tool.latency_ms} ms</div>)}
+          {call.tool_invocations.map((tool, index) => <div className={`tool-chip ${tool.status === "ok" ? "" : "failed"}`} key={`${tool.name}-${index}`}><span>{tool.name}</span> / <span>{tool.status}</span> / {tool.latency_ms} ms</div>)}
         </aside>
       </div>
     </div>
