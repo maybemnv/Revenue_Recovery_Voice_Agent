@@ -9,7 +9,7 @@ export default defineConfig({
   webServer: externalServers
     ? undefined
     : {
-        command: "docker compose --profile fixture up --build",
+        command: "docker compose --profile fixture up --build postgres redis api-fixture web-fixture",
         url: "http://localhost:3101",
         timeout: 180_000,
         reuseExistingServer: true,
