@@ -25,6 +25,10 @@ test("fixture operator flow shows persisted call, degraded booking, escalation, 
   const replay = await request.post(`${apiUrl}/api/demo/reset-and-replay`);
   await expect(replay).toBeOK();
   await expect(page.getByText("simulated fixture")).toBeVisible();
+  await expect.poll(async () => {
+    const readiness = await request.get(`${apiUrl}/health/ready`);
+    return readiness.ok() && (await readiness.json()).fixture_client_id === "northside-hvac";
+  }).toBeTruthy();
 
   await page.goto(`${webUrl}/analytics`);
   await expect(page.getByText("Fixture analytics")).toBeVisible();
