@@ -9,6 +9,8 @@ from typing import Any
 import pytest
 
 # Set before any app import: `get_settings()` is lru_cached on first call.
+os.environ.setdefault("APP_ENV", "local-fixture")
+os.environ.setdefault("FIXTURE_MODE", "true")
 os.environ.setdefault("OPENAI_API_KEY", "test-key")
 os.environ.setdefault("TWILIO_ACCOUNT_SID", "ACtest")
 os.environ.setdefault("TWILIO_AUTH_TOKEN", "test-token")

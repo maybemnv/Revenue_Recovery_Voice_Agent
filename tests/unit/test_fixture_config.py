@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 from apps.api.config.loader import ClientConfigRegistry, dump_client_config
 from apps.api.config.schema import ClientConfig
 from apps.api.routers import auth, dashboard
+from apps.api.settings import Settings
 
 
 @pytest.fixture
@@ -124,3 +125,42 @@ def test_tokenless_fixture_roles_still_enforce_viewer_read_only(
 
     assert viewer.status_code == 403
     assert admin.status_code == 200
+
+
+def test_fixture_mode_requires_local_fixture_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("FIXTURE_MODE", "true")
+
+    with pytest.raises(ValueError, match="APP_ENV=local-fixture"):
+        Settings()
+
+
+def test_non_fixture_settings_require_server_auth(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("APP_ENV", "staging")
+    monkeypatch.setenv("FIXTURE_MODE", "false")
+    monkeypatch.setenv("PUBLIC_BASE_URL", "https://voice.staging.example")
+    monkeypatch.setenv("DATABASE_URL", "postgresql+asyncpg://voice@db.internal/voice")
+    monkeypatch.setenv("REDIS_URL", "rediss://redis.internal/0")
+    monkeypatch.setenv("CORS_ALLOW_ORIGINS", "https://dashboard.staging.example")
+    monkeypatch.setenv("DASHBOARD_API_TOKEN", "")
+    monkeypatch.setenv("DASHBOARD_VIEWER_TOKEN", "")
+
+    with pytest.raises(ValueError, match="dashboard API and viewer tokens"):
+        Settings()
+
+
+def test_non_fixture_settings_reject_local_urls_and_disabled_signatures(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("APP_ENV", "staging")
+    monkeypatch.setenv("FIXTURE_MODE", "false")
+    monkeypatch.setenv("DASHBOARD_API_TOKEN", "staging-admin")
+    monkeypatch.setenv("DASHBOARD_VIEWER_TOKEN", "staging-viewer")
+    monkeypatch.setenv("TWILIO_VALIDATE_SIGNATURES", "false")
+
+    with pytest.raises(ValueError, match="TWILIO_VALIDATE_SIGNATURES"):
+        Settings()
+
+    monkeypatch.setenv("TWILIO_VALIDATE_SIGNATURES", "true")
+    with pytest.raises(ValueError, match="localhost URLs"):
+        Settings()

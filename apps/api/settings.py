@@ -5,7 +5,7 @@ from __future__ import annotations
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field, field_validator
+from pydantic import AliasChoices, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -16,7 +16,10 @@ class Settings(BaseSettings):
         env_file=(REPO_ROOT / ".env"), env_file_encoding="utf-8", extra="ignore"
     )
 
-    environment: str = "local"
+    app_env: str = Field(
+        default="production",
+        validation_alias=AliasChoices("APP_ENV", "ENVIRONMENT"),
+    )
     log_level: str = "INFO"
     public_base_url: str = "http://localhost:8000"
 
@@ -82,9 +85,51 @@ class Settings(BaseSettings):
             return [o.strip() for o in v.split(",") if o.strip()]
         return v
 
+    @model_validator(mode="after")
+    def _validate_runtime_boundary(self) -> Settings:
+        self.app_env = self.app_env.strip().lower()
+        if self.app_env not in {"local-fixture", "staging", "production"}:
+            raise ValueError("APP_ENV must be local-fixture, staging, or production")
+        if self.fixture_mode != (self.app_env == "local-fixture"):
+            raise ValueError("FIXTURE_MODE must match APP_ENV=local-fixture")
+        if self.app_env != "local-fixture":
+            if not self.dashboard_api_token or not self.dashboard_viewer_token:
+                raise ValueError(
+                    "dashboard API and viewer tokens are required outside APP_ENV=local-fixture"
+                )
+            if (
+                self.dashboard_api_token in {"change-me-in-production", "change-me-viewer"}
+                or self.dashboard_viewer_token in {"change-me-in-production", "change-me-viewer"}
+            ):
+                raise ValueError(
+                    "development dashboard credentials are not allowed "
+                    "outside APP_ENV=local-fixture"
+                )
+            if not self.twilio_validate_signatures:
+                raise ValueError(
+                    "TWILIO_VALIDATE_SIGNATURES must be true outside APP_ENV=local-fixture"
+                )
+            local_values = [
+                self.public_base_url,
+                self.database_url,
+                self.database_url_sync,
+                self.redis_url,
+                self.celery_broker_url,
+                self.celery_result_backend,
+                *self.cors_allow_origins,
+            ]
+            if any("localhost" in value or "127.0.0.1" in value for value in local_values):
+                raise ValueError("localhost URLs are only allowed in APP_ENV=local-fixture")
+        return self
+
+    @property
+    def environment(self) -> str:
+        """Compatibility name for logs and integrations."""
+        return self.app_env
+
     @property
     def is_production(self) -> bool:
-        return self.environment == "production"
+        return self.app_env == "production"
 
     @property
     def websocket_base_url(self) -> str:

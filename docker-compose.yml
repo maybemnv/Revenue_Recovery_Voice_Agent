@@ -37,7 +37,7 @@ services:
     build: .
     profiles: ["fixture"]
     environment:
-      ENVIRONMENT: fixture
+      APP_ENV: local-fixture
       FIXTURE_MODE: "true"
       FIXTURE_API_PORT: "8101"
       FIXTURE_WEB_PORT: "3101"
@@ -66,6 +66,7 @@ services:
     profiles: ["fixture"]
     environment:
       API_BASE_URL: http://api-fixture:8101
+      APP_ENV: local-fixture
       FIXTURE_MODE: "true"
       NEXT_PUBLIC_API_BASE_URL: http://localhost:8101
     ports:
