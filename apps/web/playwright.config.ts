@@ -5,6 +5,7 @@ const externalServers = Boolean(process.env.PLAYWRIGHT_EXTERNAL_SERVERS);
 export default defineConfig({
   testDir: "./tests",
   timeout: 30_000,
+  workers: 1,
   use: { baseURL: "http://localhost:3101", trace: "retain-on-failure" },
   webServer: externalServers
     ? undefined
