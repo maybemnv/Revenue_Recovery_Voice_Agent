@@ -10,13 +10,20 @@ const FORWARDED_RESPONSE_HEADERS = [
 type RouteContext = { params: Promise<{ path: string[] }> };
 
 function backendUrl(path: string[], request: NextRequest): string {
-  const base = (process.env.API_BASE_URL ?? process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000").replace(/\/$/, "");
+  const configuredBase = process.env.API_BASE_URL ?? process.env.NEXT_PUBLIC_API_BASE_URL;
+  const base = configuredBase ?? (process.env.APP_ENV === "local-fixture" ? "http://localhost:8000" : "");
+  if (!base) throw new Error("API_BASE_URL is required outside APP_ENV=local-fixture");
+  const hostname = new URL(base).hostname;
+  if (process.env.APP_ENV !== "local-fixture" && ["localhost", "127.0.0.1", "::1"].includes(hostname)) {
+    throw new Error("localhost API URLs are only allowed in APP_ENV=local-fixture");
+  }
+  const normalizedBase = base.replace(/\/$/, "");
   const suffix = path.map(encodeURIComponent).join("/");
   // Health endpoints live at the API root (`/health/ready`), while dashboard
   // routes are registered under `/api`; the proxy prepends `/api/` only for
   // the latter so both trees stay reachable through the same catch-all.
   const prefix = path[0] === "health" ? "" : "/api/";
-  return `${base}${prefix}${suffix}${new URL(request.url).search}`;
+  return `${normalizedBase}${prefix}${suffix}${new URL(request.url).search}`;
 }
 
 function backendHeaders(request: NextRequest): Headers {
@@ -29,10 +36,11 @@ function backendHeaders(request: NextRequest): Headers {
   // The token is read only by this server-side route. It is never serialized
   // into the page, browser bundle, query string, or SSE URL.
   const fixtureRole = request.headers.get("x-fixture-role");
-  if (process.env.FIXTURE_MODE === "true" && fixtureRole && ["admin", "viewer"].includes(fixtureRole)) {
+  const fixtureMode = process.env.APP_ENV === "local-fixture" && process.env.FIXTURE_MODE === "true";
+  if (fixtureMode && fixtureRole && ["admin", "viewer"].includes(fixtureRole)) {
     headers.set("x-fixture-role", fixtureRole);
   }
-  const token = process.env.FIXTURE_MODE === "true"
+  const token = fixtureMode
     ? undefined
     : process.env.DASHBOARD_VIEWER_TOKEN ?? process.env.DASHBOARD_API_TOKEN;
   if (token) headers.set("authorization", `Bearer ${token}`);
