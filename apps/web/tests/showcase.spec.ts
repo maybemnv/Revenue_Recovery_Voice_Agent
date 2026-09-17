@@ -38,8 +38,9 @@ test("fixture operator flow shows persisted call, degraded booking, escalation, 
 
   await page.goto(`${webUrl}/agent`);
   await expect(page.getByRole("heading", { name: "Agent surface" })).toBeVisible();
-  await expect(page.getByText("prompt: pmpt_northside_v4")).toBeVisible();
-  await expect(page.getByText("service area")).toBeVisible();
+  const fixtureConfig = page.getByLabel("Configuration JSON");
+  await expect(fixtureConfig).toHaveValue(/"prompt_id": "pmpt_northside_v4"/);
+  await expect(fixtureConfig).toHaveValue(/"service_area"/);
 });
 
 test("analytics uses the server-configured fixture client and excludes unrelated rows", async ({ page }) => {
