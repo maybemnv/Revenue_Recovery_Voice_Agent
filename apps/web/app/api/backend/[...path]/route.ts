@@ -1,4 +1,11 @@
+import { BlockList } from "node:net";
 import { NextRequest } from "next/server";
+
+const localAddresses = new BlockList();
+localAddresses.addSubnet("127.0.0.0", 8, "ipv4");
+localAddresses.addAddress("0.0.0.0", "ipv4");
+localAddresses.addAddress("::1", "ipv6");
+localAddresses.addAddress("::", "ipv6");
 
 const FORWARDED_RESPONSE_HEADERS = [
   "cache-control",
@@ -10,13 +17,22 @@ const FORWARDED_RESPONSE_HEADERS = [
 type RouteContext = { params: Promise<{ path: string[] }> };
 
 function backendUrl(path: string[], request: NextRequest): string {
-  const base = (process.env.API_BASE_URL ?? process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000").replace(/\/$/, "");
+  const configuredBase = process.env.API_BASE_URL ?? process.env.NEXT_PUBLIC_API_BASE_URL;
+  const base = configuredBase ?? (process.env.APP_ENV === "local-fixture" ? "http://localhost:8000" : "");
+  if (!base) throw new Error("API_BASE_URL is required outside APP_ENV=local-fixture");
+  const hostname = new URL(base).hostname.replace(/^\[|\]$/g, "").replace(/\.$/, "");
+  const localHost = hostname === "localhost" || hostname.endsWith(".localhost") ||
+    localAddresses.check(hostname, hostname.includes(":") ? "ipv6" : "ipv4");
+  if (process.env.APP_ENV !== "local-fixture" && localHost) {
+    throw new Error("localhost API URLs are only allowed in APP_ENV=local-fixture");
+  }
+  const normalizedBase = base.replace(/\/$/, "");
   const suffix = path.map(encodeURIComponent).join("/");
   // Health endpoints live at the API root (`/health/ready`), while dashboard
   // routes are registered under `/api`; the proxy prepends `/api/` only for
   // the latter so both trees stay reachable through the same catch-all.
-  const prefix = path[0] === "health" ? "" : "/api/";
-  return `${base}${prefix}${suffix}${new URL(request.url).search}`;
+  const prefix = path[0] === "health" ? "/" : "/api/";
+  return `${normalizedBase}${prefix}${suffix}${new URL(request.url).search}`;
 }
 
 function backendHeaders(request: NextRequest): Headers {
@@ -29,10 +45,11 @@ function backendHeaders(request: NextRequest): Headers {
   // The token is read only by this server-side route. It is never serialized
   // into the page, browser bundle, query string, or SSE URL.
   const fixtureRole = request.headers.get("x-fixture-role");
-  if (process.env.FIXTURE_MODE === "true" && fixtureRole && ["admin", "viewer"].includes(fixtureRole)) {
+  const fixtureMode = process.env.APP_ENV === "local-fixture" && process.env.FIXTURE_MODE === "true";
+  if (fixtureMode && fixtureRole && ["admin", "viewer"].includes(fixtureRole)) {
     headers.set("x-fixture-role", fixtureRole);
   }
-  const token = process.env.FIXTURE_MODE === "true"
+  const token = fixtureMode
     ? undefined
     : process.env.DASHBOARD_VIEWER_TOKEN ?? process.env.DASHBOARD_API_TOKEN;
   if (token) headers.set("authorization", `Bearer ${token}`);

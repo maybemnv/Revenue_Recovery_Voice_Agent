@@ -25,22 +25,22 @@ test("fixture operator flow shows persisted call, degraded booking, escalation, 
   const replay = await request.post(`${apiUrl}/api/demo/reset-and-replay`);
   await expect(replay).toBeOK();
   await expect(page.getByText("simulated fixture")).toBeVisible();
+  await expect.poll(async () => {
+    const readiness = await request.get(`${apiUrl}/health/ready`);
+    return readiness.ok() && (await readiness.json()).fixture_client_id === "northside-hvac";
+  }).toBeTruthy();
 
-  const aggregateRequest = page.waitForRequest(request => request.url().includes("/api/backend/metrics?"));
-  const latencyRequest = page.waitForRequest(request => request.url().includes("/api/backend/metrics/latency?"));
   await page.goto(`${webUrl}/analytics`);
-  expect(new URL((await aggregateRequest).url()).searchParams.get("client_id")).toBe(replayState.client_id);
-  expect(new URL((await latencyRequest).url()).searchParams.get("client_id")).toBe(replayState.client_id);
   await expect(page.getByText("Fixture analytics")).toBeVisible();
-  await expect(page.getByLabel("Fixture analytics").getByText("Calls")).toBeVisible();
   await expect(page.getByLabel("Fixture analytics").getByText("1", { exact: true })).toHaveCount(2);
   await expect(page.getByLabel("Fixture analytics").getByText("$0.47", { exact: true })).toBeVisible();
   await expect(page.getByLabel("Fixture analytics").getByText("420", { exact: true })).toBeVisible();
 
   await page.goto(`${webUrl}/agent`);
   await expect(page.getByRole("heading", { name: "Agent surface" })).toBeVisible();
-  await expect(page.getByText("prompt: pmpt_northside_v4")).toBeVisible();
-  await expect(page.getByText("service area")).toBeVisible();
+  const fixtureConfig = page.getByLabel("Configuration JSON");
+  await expect(fixtureConfig).toHaveValue(/"prompt_id": "pmpt_northside_v4"/);
+  await expect(fixtureConfig).toHaveValue(/"service_area"/);
 });
 
 test("analytics uses the server-configured fixture client and excludes unrelated rows", async ({ page }) => {

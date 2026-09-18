@@ -37,7 +37,7 @@ services:
     build: .
     profiles: ["fixture"]
     environment:
-      ENVIRONMENT: fixture
+      APP_ENV: local-fixture
       FIXTURE_MODE: "true"
       FIXTURE_API_PORT: "8101"
       FIXTURE_WEB_PORT: "3101"
@@ -59,6 +59,11 @@ services:
       redis:
         condition: service_healthy
     command: sh -c "uv run alembic upgrade head && uv run uvicorn apps.api.main:app --host 0.0.0.0 --port 8101"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8101/health')"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
 
   web-fixture:
     build:
@@ -66,12 +71,14 @@ services:
     profiles: ["fixture"]
     environment:
       API_BASE_URL: http://api-fixture:8101
+      APP_ENV: local-fixture
       FIXTURE_MODE: "true"
       NEXT_PUBLIC_API_BASE_URL: http://localhost:8101
     ports:
       - "3101:3000"
     depends_on:
-      - api-fixture
+      api-fixture:
+        condition: service_healthy
 
   postgres:
     image: pgvector/pgvector:pg16

@@ -42,6 +42,11 @@ The launcher starts the fixture Compose profile. Open `http://127.0.0.1:3101/cal
 
 For the full local stack:
 
+The example defaults to staging with fixture mode disabled. Configure both
+dashboard tokens and non-loopback runtime URLs as described in
+[`docs/deployment.md`](docs/deployment.md) before starting the ordinary services.
+A copied example with blank tokens intentionally fails startup.
+
 ```powershell
 Copy-Item .env.example .env
 uv sync

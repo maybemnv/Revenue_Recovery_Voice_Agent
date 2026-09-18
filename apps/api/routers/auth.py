@@ -1,9 +1,9 @@
 """Bearer-token auth for the dashboard.
 
 Two levels: an admin token that can write configs, and a viewer token that can
-only read. When neither is configured the dependencies pass everything through,
-which is the local development path — `main.py` logs a warning at startup so an
-unauthenticated deployment announces itself rather than hiding.
+only read. When neither is configured the dependencies pass fixture roles
+through. That path is valid only for the local fixture environment; non-fixture
+settings fail at startup before an unauthenticated dashboard can be exposed.
 """
 
 from __future__ import annotations

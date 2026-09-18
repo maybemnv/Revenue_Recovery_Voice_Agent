@@ -1,9 +1,8 @@
 """Read-only REST for the dashboard: call list, call detail, metrics.
 
 Two tokens, two capabilities. `dashboard_api_token` can read everything and edit
-configs; `dashboard_viewer_token` can only read. Both are optional and, when
-unset, auth is skipped entirely — that is the local-dev path, and it is logged
-at startup so it cannot be mistaken for a configured state.
+configs; `dashboard_viewer_token` can only read. They may be omitted only by the
+local fixture environment, where the explicit fixture role still controls writes.
 """
 
 from __future__ import annotations
